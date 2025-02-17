@@ -1,0 +1,129 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Override body background when using bg-music-pattern */
+body.bg-music-pattern {
+  background: radial-gradient(circle at top left, #1f1c2c, #928dab) !important;
+  background-attachment: fixed;
+}
+
+/* Existing styles */
+body {
+  color: var(--foreground);
+  background: var(--background);
+  font-family: Arial, Helvetica, sans-serif;
+}
+
+/* StarRating Component Styles */
+.feedback {
+  max-width: 360px;
+  /* Use a transparent background so it blends with your dark theme */
+  background-color: transparent;
+  width: 100%;
+  padding: 10px;
+  border-radius: 8px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.rating {
+  display: flex;
+  justify-content: center;
+  overflow: hidden;
+  flex-direction: row-reverse;
+  height: 60px;  /* Adjust height to suit your design */
+  position: relative;
+}
+
+.rating > input {
+  display: none;
+}
+
+.rating > label {
+  cursor: pointer;
+  width: 50px;  /* Increase size for better tap targets */
+  height: 50px;
+  margin-top: auto;
+  /* Default (unchecked) star image, using a darker tone */
+  background-image: url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' width='126' height='126'%3e%3cpath fill='%23555' d='M121.215 44.212l-34.899-3.3c-2.2-.2-4.101-1.6-5-3.7l-12.5-30.3c-2-5-9.101-5-11.101 0l-12.4 30.3c-.8 2.1-2.8 3.5-5 3.7l-34.9 3.3c-5.2.5-7.3 7-3.4 10.5l26.3 23.1c1.7 1.5 2.4 3.7 1.9 5.9l-7.9 32.4c-1.2 5.1 4.3 9.3 8.9 6.6l29.1-17.1c1.9-1.1 4.2-1.1 6.1 0l29.1 17.1c4.6 2.7 10.1-1.4 8.9-6.6l-7.8-32.4c-.5-2.2.2-4.4 1.9-5.9l26.3-23.1c3.8-3.5 1.6-10-3.6-10.5z'/%3e%3c/svg%3e");
+  background-repeat: no-repeat;
+  background-position: center;
+  background-size: 70%;
+  transition: 0.3s;
+}
+
+/* When an input is checked, show a "gold" star */
+.rating > input:checked ~ label,
+.rating > input:checked ~ label ~ label {
+  background-image: url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' width='126' height='126'%3e%3cpath fill='%23fcd93a' d='M121.215 44.212l-34.899-3.3c-2.2-.2-4.101-1.6-5-3.7l-12.5-30.3c-2-5-9.101-5-11.101 0l-12.4 30.3c-.8 2.1-2.8 3.5-5 3.7l-34.9 3.3c-5.2.5-7.3 7-3.4 10.5l26.3 23.1c1.7 1.5 2.4 3.7 1.9 5.9l-7.9 32.4c-1.2 5.1 4.3 9.3 8.9 6.6l29.1-17.1c1.9-1.1 4.2-1.1 6.1 0l29.1 17.1c4.6 2.7 10.1-1.4 8.9-6.6l-7.8-32.4c-.5-2.2.2-4.4 1.9-5.9l26.3-23.1c3.8-3.5 1.6-10-3.6-10.5z'/%3e%3c/svg%3e");
+}
+
+/* Hover state */
+.rating > input:not(:checked) ~ label:hover,
+.rating > input:not(:checked) ~ label:hover ~ label {
+  background-image: url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' width='126' height='126'%3e%3cpath fill='%23d8b11e' d='M121.215 44.212l-34.899-3.3c-2.2-.2-4.101-1.6-5-3.7l-12.5-30.3c-2-5-9.101-5-11.101 0l-12.4 30.3c-.8 2.1-2.8 3.5-5 3.7l-34.9 3.3c-5.2.5-7.3 7-3.4 10.5l26.3 23.1c1.7 1.5 2.4 3.7 1.9 5.9l-7.9 32.4c-1.2 5.1 4.3 9.3 8.9 6.6l29.1-17.1c1.9-1.1 4.2-1.1 6.1 0l29.1 17.1c4.6 2.7 10.1-1.4 8.9-6.6l-7.8-32.4c-.5-2.2.2-4.4 1.9-5.9l26.3-23.1c3.8-3.5 1.6-10-3.6-10.5z'/%3e%3c/svg%3e");
+}
+
+/* Emoji wrapper (adjusted for dark background) */
+.emoji-wrapper {
+  width: 100%;
+  text-align: center;
+  height: 70px; /* Adjust to match your SVG height */
+  overflow: hidden;
+  position: absolute;
+  top: 0;
+  left: 0;
+}
+
+.emoji-wrapper:before,
+.emoji-wrapper:after {
+  content: "";
+  height: 15px;
+  width: 100%;
+  position: absolute;
+  left: 0;
+  z-index: 1;
+}
+
+.emoji-wrapper:before {
+  top: 0;
+  background: linear-gradient(to bottom, rgba(0, 0, 0, 1) 0%, rgba(0, 0, 0, 1) 35%, rgba(0, 0, 0, 0) 100%);
+}
+
+.emoji-wrapper:after {
+  bottom: 0;
+  background: linear-gradient(to top, rgba(0, 0, 0, 1) 0%, rgba(0, 0, 0, 1) 35%, rgba(0, 0, 0, 0) 100%);
+}
+
+.emoji {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  transition: 0.3s;
+}
+
+.emoji > svg {
+  margin: 5px 0;
+  width: 70px;
+  height: 70px;
+  flex-shrink: 0;
+}
+
+/* These transforms slide the emoji container based on which radio is checked.
+   Adjust the translateY amounts if your SVG heights change. */
+#rating-1:checked ~ .emoji-wrapper > .emoji { transform: translateY(-70px); }
+#rating-2:checked ~ .emoji-wrapper > .emoji { transform: translateY(-140px); }
+#rating-3:checked ~ .emoji-wrapper > .emoji { transform: translateY(-210px); }
+#rating-4:checked ~ .emoji-wrapper > .emoji { transform: translateY(-280px); }
+#rating-5:checked ~ .emoji-wrapper > .emoji { transform: translateY(-350px); }
+
+@keyframes soundwave {
+  0%, 100% { transform: scaleY(1); }
+  50% { transform: scaleY(1.5); }
+}
+.soundwave-bar {
+  animation: soundwave 1s infinite ease-in-out;
+}
+

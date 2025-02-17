@@ -1,0 +1,87 @@
+/* StarRating.module.css */
+.feedback {
+    max-width: 360px;
+    background-color: transparent; /* Transparent to blend with dark theme */
+    width: 100%;
+    padding: 20px;
+    border-radius: 8px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+  }
+  
+  .rating {
+    /* We use column layout so the stars and emoji block are vertically stacked */
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+  }
+  
+  /* Radio inputs hidden */
+  .rating > input {
+    display: none;
+  }
+  
+  /* Star labels – arrange them in a row */
+  .star-row {
+    display: flex;
+    flex-direction: row-reverse; /* Reverse order for the sibling selector to work */
+    justify-content: center;
+    gap: 10px;
+  }
+  
+  /* Default (unchecked) star appearance */
+  .star-row > label {
+    cursor: pointer;
+    width: 60px;
+    height: 60px;
+    background-image: url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' width='126' height='126'%3e%3cpath fill='%23555' d='M121.215 44.212l-34.899-3.3c-2.2-.2-4.101-1.6-5-3.7l-12.5-30.3c-2-5-9.101-5-11.101 0l-12.4 30.3c-.8 2.1-2.8 3.5-5 3.7l-34.9 3.3c-5.2.5-7.3 7-3.4 10.5l26.3 23.1c1.7 1.5 2.4 3.7 1.9 5.9l-7.9 32.4c-1.2 5.1 4.3 9.3 8.9 6.6l29.1-17.1c1.9-1.1 4.2-1.1 6.1 0l29.1 17.1c4.6 2.7 10.1-1.4 8.9-6.6l-7.8-32.4c-.5-2.2.2-4.4 1.9-5.9l26.3-23.1c3.8-3.5 1.6-10-3.6-10.5z'/%3e%3c/svg%3e");
+    background-repeat: no-repeat;
+    background-position: center;
+    background-size: 70%;
+    transition: background-image 0.3s;
+  }
+  
+  /* When checked, show gold star */
+  .rating > input:checked ~ .star-row > label,
+  .rating > input:checked ~ .star-row > label ~ label {
+    background-image: url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' width='126' height='126'%3e%3cpath fill='%23fcd93a' d='M121.215 44.212l-34.899-3.3c-2.2-.2-4.101-1.6-5-3.7l-12.5-30.3c-2-5-9.101-5-11.101 0l-12.4 30.3c-.8 2.1-2.8 3.5-5 3.7l-34.9 3.3c-5.2.5-7.3 7-3.4 10.5l26.3 23.1c1.7 1.5 2.4 3.7 1.9 5.9l-7.9 32.4c-1.2 5.1 4.3 9.3 8.9 6.6l29.1-17.1c1.9-1.1 4.2-1.1 6.1 0l29.1 17.1c4.6 2.7 10.1-1.4 8.9-6.6l-7.8-32.4c-.5-2.2.2-4.4 1.9-5.9l26.3-23.1c3.8-3.5 1.6-10-3.6-10.5z'/%3e%3c/svg%3e");
+  }
+  
+  /* Hover state for unchecked labels */
+  .rating > input:not(:checked) ~ .star-row > label:hover,
+  .rating > input:not(:checked) ~ .star-row > label:hover ~ label {
+    background-image: url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' width='126' height='126'%3e%3cpath fill='%23d8b11e' d='M121.215 44.212l-34.899-3.3c-2.2-.2-4.101-1.6-5-3.7l-12.5-30.3c-2-5-9.101-5-11.101 0l-12.4 30.3c-.8 2.1-2.8 3.5-5 3.7l-34.9 3.3c-5.2.5-7.3 7-3.4 10.5l26.3 23.1c1.7 1.5 2.4 3.7 1.9 5.9l-7.9 32.4c-1.2 5.1 4.3 9.3 8.9 6.6l29.1-17.1c1.9-1.1 4.2-1.1 6.1 0l29.1 17.1c4.6 2.7 10.1-1.4 8.9-6.6l-7.8-32.4c-.5-2.2.2-4.4 1.9-5.9l26.3-23.1c3.8-3.5 1.6-10-3.6-10.5z'/%3e%3c/svg%3e");
+  }
+  
+  /* The emoji wrapper now sits below the stars */
+  .emoji-wrapper {
+    margin-top: 10px;
+    width: 100%;
+    height: 70px; /* height to display one emoji at a time */
+    overflow: hidden;
+    text-align: center;
+  }
+  
+  /* The emoji container holds six SVGs stacked vertically */
+  .emoji {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    transition: transform 0.5s ease-in-out; /* smooth transition */
+  }
+  
+  .emoji > svg {
+    margin: 5px 0;
+    width: 70px;
+    height: 70px;
+    flex-shrink: 0;
+  }
+  
+  /* Slide the emoji container upward based on which input is checked */
+  #rating-1:checked ~ .emoji-wrapper > .emoji { transform: translateY(-70px); }
+  #rating-2:checked ~ .emoji-wrapper > .emoji { transform: translateY(-140px); }
+  #rating-3:checked ~ .emoji-wrapper > .emoji { transform: translateY(-210px); }
+  #rating-4:checked ~ .emoji-wrapper > .emoji { transform: translateY(-280px); }
+  #rating-5:checked ~ .emoji-wrapper > .emoji { transform: translateY(-350px); }
+  
