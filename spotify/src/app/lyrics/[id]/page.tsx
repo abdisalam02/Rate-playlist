@@ -22,52 +22,53 @@ function shuffleArray(array) {
   return array.sort(() => Math.random() - 0.5);
 }
 
-// Helper to validate if a line is a proper lyric.
+// Helper: Validate if a line is a proper lyric.
 function isValidLyric(line) {
   if (!line || typeof line !== 'string') return false;
   const cleaned = line.trim().replace(/[.,\/#!$%\^&\*;:{}=\-_`~()]/g, "").trim();
   return cleaned.length >= 2 && /[a-zA-Z]/.test(cleaned);
 }
 
+// Receipt component using theme classes.
 function Receipt({ rounds, score }) {
   const accuracy = Math.round((score / rounds.length) * 100);
   const getGrade = (acc) => {
-    if (acc >= 90) return { grade: 'A', color: 'text-green-400' };
-    if (acc >= 80) return { grade: 'B', color: 'text-blue-400' };
-    if (acc >= 70) return { grade: 'C', color: 'text-yellow-400' };
-    if (acc >= 60) return { grade: 'D', color: 'text-orange-400' };
-    return { grade: 'F', color: 'text-red-400' };
+    if (acc >= 90) return { grade: 'A', color: 'text-success' };
+    if (acc >= 80) return { grade: 'B', color: 'text-info' };
+    if (acc >= 70) return { grade: 'C', color: 'text-warning' };
+    if (acc >= 60) return { grade: 'D', color: 'text-orange-500' };
+    return { grade: 'F', color: 'text-error' };
   };
   const { grade, color } = getGrade(accuracy);
 
   return (
     <div className="w-full max-w-xl mx-auto px-4">
-      <motion.div 
+      <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
-        className="p-8 bg-gray-800 rounded-lg border border-gray-700 shadow-xl"
+        className="p-8 bg-base-200 rounded-lg border border-base-content/50 shadow-xl"
       >
         <div className="text-center mb-6">
           <h1 className="text-4xl font-bold mb-2">Your Results</h1>
-          <div className="w-32 h-1 bg-gradient-to-r from-purple-500 to-pink-500 mx-auto"></div>
+          <div className="w-32 h-1 bg-gradient-to-r from-primary to-accent mx-auto"></div>
         </div>
         <div className="space-y-6">
-          <div className="flex justify-between items-center p-4 bg-gray-700 rounded-lg">
+          <div className="flex justify-between items-center p-4 bg-base-300 rounded-lg">
             <span className="text-xl">Final Score</span>
             <span className="text-2xl font-bold">{score} / {rounds.length}</span>
           </div>
-          <div className="flex justify-between items-center p-4 bg-gray-700 rounded-lg">
+          <div className="flex justify-between items-center p-4 bg-base-300 rounded-lg">
             <span className="text-xl">Accuracy</span>
             <span className="text-2xl font-bold">{accuracy}%</span>
           </div>
-          <div className="flex justify-between items-center p-4 bg-gray-700 rounded-lg">
+          <div className="flex justify-between items-center p-4 bg-base-300 rounded-lg">
             <span className="text-xl">Grade</span>
             <span className={`text-3xl font-bold ${color}`}>{grade}</span>
           </div>
         </div>
         <div className="mt-8 flex justify-center">
           <Link href="/">
-            <motion.button 
+            <motion.button
               whileHover={{ scale: 1.05 }}
               whileTap={{ scale: 0.95 }}
               className="btn btn-primary px-8 py-3"
@@ -81,17 +82,41 @@ function Receipt({ rounds, score }) {
   );
 }
 
+// Loading screen component.
+function LoadingScreen() {
+  return (
+    <div className="h-[calc(100vh-64px)] flex flex-col items-center justify-center">
+      <motion.div
+        animate={{ rotate: 360 }}
+        transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
+        className="mb-4"
+      >
+        <svg className="w-16 h-16 text-primary" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+        </svg>
+      </motion.div>
+      <p className="text-xl animate-pulse">Loading your music quiz...</p>
+    </div>
+  );
+}
+
+// Layout wrapper.
+const Layout = ({ children }) => (
+  <div className="min-h-screen bg-base-100 text-base-content">
+    <div className="fixed top-0 left-0 right-0 z-50 bg-base-100">
+      <Navbar />
+    </div>
+    <div className="pt-16">{children}</div>
+  </div>
+);
+
 export default function FinishLyricGame() {
   const { id } = useParams();
 
-  // Clear any saved state on mount so that every visit starts fresh.
-  useEffect(() => {
-    if (id) {
-      localStorage.removeItem(`finishLyricGame-${id}`);
-    }
-  }, [id]);
+  const [mounted, setMounted] = useState(false);
+  const [dataLoaded, setDataLoaded] = useState(false);
 
-  // Initialize game state WITHOUT loading persisted state.
   const [gameState, setGameState] = useState({
     playlist: null,
     rounds: [],
@@ -102,25 +127,10 @@ export default function FinishLyricGame() {
     error: ''
   });
 
-  // Optionally, you can remove the persistence effect below if you don't want state to be saved across refreshes.
-  // Persist state to localStorage on change.
   useEffect(() => {
-    if (id) {
-      localStorage.setItem(`finishLyricGame-${id}`, JSON.stringify(gameState));
-    }
-  }, [gameState, id]);
+    setMounted(true);
+  }, []);
 
-  // Layout wrapper.
-  const Layout = ({ children }) => (
-    <div className="min-h-screen bg-gray-900 text-white">
-      <div className="fixed top-0 left-0 right-0 z-50 bg-gray-900">
-        <Navbar />
-      </div>
-      <div className="pt-16">{children}</div>
-    </div>
-  );
-
-  // Fetch the playlist.
   useEffect(() => {
     if (!id || gameState.playlist) return;
     async function fetchPlaylist() {
@@ -139,7 +149,6 @@ export default function FinishLyricGame() {
     fetchPlaylist();
   }, [id, gameState.playlist]);
 
-  // Generate rounds once the playlist is loaded.
   useEffect(() => {
     async function generateRounds() {
       if (!gameState.playlist || !gameState.playlist.songs || gameState.playlist.songs.length === 0) {
@@ -154,23 +163,17 @@ export default function FinishLyricGame() {
       const roundPromises = shuffledCandidates.map(async (song) => {
         const { artist, title } = parseSongDetails(song);
         try {
-          const res = await fetch(
-            `/api/Lyrics/${encodeURIComponent(artist)}/${encodeURIComponent(title)}`
-          );
+          const res = await fetch(`/api/Lyrics/${encodeURIComponent(artist)}/${encodeURIComponent(title)}`);
           const data = await res.json();
           if (!data.lyrics) return null;
-          const lines = data.lyrics
-            .split('\n')
-            .map(line => line.trim())
-            .filter(isValidLyric);
+          const lines = data.lyrics.split('\n').map(line => line.trim()).filter(isValidLyric);
           if (lines.length < maxPromptLines + 1) return null;
           const upperBound = Math.min(maxPromptLines, lines.length - 1);
           const breakIndex = Math.floor(Math.random() * upperBound);
           const prompt = lines.slice(0, breakIndex + 1).join('\n');
           const correctAnswer = lines[breakIndex + 1];
           const validDistractors = lines.filter((line, i) =>
-            i !== breakIndex + 1 &&
-            line.toLowerCase() !== correctAnswer.toLowerCase()
+            i !== breakIndex + 1 && line.toLowerCase() !== correctAnswer.toLowerCase()
           );
           if (validDistractors.length < 3) return null;
           const distractors = shuffleArray(validDistractors).slice(0, 3);
@@ -196,11 +199,12 @@ export default function FinishLyricGame() {
         return;
       }
       setGameState(prev => ({ ...prev, rounds: validRounds, status: 'ready' }));
+      setDataLoaded(true);
     }
     if (gameState.playlist) {
       generateRounds();
     }
-  }, [gameState.playlist, gameState.rounds.length]);
+  }, [gameState.playlist]);
 
   function handleStartGame() {
     setGameState(prev => ({ ...prev, status: 'playing' }));
@@ -226,25 +230,10 @@ export default function FinishLyricGame() {
     }, 1500);
   }
 
-  // Loading state.
-  if (gameState.status === 'loading') {
-    return (
-      <Layout>
-        <div className="h-[calc(100vh-64px)] flex flex-col items-center justify-center">
-          <motion.div 
-            animate={{ rotate: 360 }}
-            transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
-            className="mb-4"
-          >
-            <svg className="w-16 h-16 text-purple-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-            </svg>
-          </motion.div>
-          <p className="text-xl animate-pulse">Loading your music quiz...</p>
-        </div>
-      </Layout>
-    );
+  const accuracy = gameState.rounds.length > 0 ? Math.round((gameState.score / gameState.rounds.length) * 100) : 0;
+
+  if (!mounted || !dataLoaded) {
+    return <Layout><LoadingScreen /></Layout>;
   }
 
   if (gameState.status === 'error') {
@@ -252,7 +241,7 @@ export default function FinishLyricGame() {
       <Layout>
         <div className="h-[calc(100vh-64px)] flex flex-col items-center justify-center px-4">
           <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="text-center">
-            <p className="text-red-500 text-xl mb-4">{gameState.error}</p>
+            <p className="text-error text-xl mb-4">{gameState.error}</p>
             <Link href="/">
               <motion.button whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }} className="btn btn-primary">
                 Back to Home
@@ -270,7 +259,7 @@ export default function FinishLyricGame() {
         <div className="h-[calc(100vh-64px)] flex flex-col items-center justify-center px-4">
           <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="text-center">
             <h1 className="text-4xl font-bold mb-6">Ready to Play?</h1>
-            <p className="text-xl mb-8">We've prepared {gameState.rounds.length} songs for you!</p>
+            <p className="text-xl mb-8">We've prepared {gameState.rounds.length} rounds for you!</p>
             <motion.button
               whileHover={{ scale: 1.05 }}
               whileTap={{ scale: 0.95 }}
@@ -312,10 +301,10 @@ export default function FinishLyricGame() {
               <motion.img initial={{ opacity: 0, scale: 0.8 }} animate={{ opacity: 1, scale: 1 }} src={song.image_url} alt={song.name} className="w-48 h-48 object-cover rounded-lg shadow-xl" />
               <div className="text-center md:text-left">
                 <h2 className="text-2xl font-bold">{song.name}</h2>
-                <p className="text-xl text-gray-300">{songDetails.artist}</p>
+                <p className="text-xl text-base-content/70">{songDetails.artist}</p>
               </div>
             </div>
-            <div className="bg-gray-800 p-6 rounded-lg mb-6 whitespace-pre-wrap font-mono border border-gray-700 shadow-lg">
+            <div className="bg-base-300 p-6 rounded-lg mb-6 whitespace-pre-wrap font-mono border border-base-content/50 shadow-lg">
               <pre className="text-lg">{prompt}</pre>
             </div>
           </motion.div>
@@ -333,11 +322,11 @@ export default function FinishLyricGame() {
                 p-4 rounded-lg text-lg font-medium transition-all
                 ${gameState.selectedOption !== null
                   ? option === correctAnswer
-                    ? 'bg-green-600 border-green-600'
+                    ? 'bg-success border-success'
                     : option === gameState.selectedOption
-                    ? 'bg-red-600 border-red-600'
-                    : 'bg-gray-700 border-gray-600'
-                  : 'bg-gray-700 border-gray-600 hover:bg-gray-600'
+                    ? 'bg-error border-error'
+                    : 'bg-base-300 border-base-content/50'
+                  : 'bg-base-300 border-base-content/50 hover:bg-base-200'
                 }
               `}
             >

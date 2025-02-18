@@ -1,5 +1,5 @@
-// app/layout.jsx
 import './globals.css';
+import Template from './template';
 
 export const metadata = {
   title: 'Spotify Rate Your Playlist',
@@ -8,9 +8,10 @@ export const metadata = {
 
 export default function RootLayout({ children }) {
   return (
-    <html lang="en">
-      {/* Add our custom class to body */}
-      <body className="bg-music-pattern">{children}</body>
+    <html lang="en" data-theme="light">
+      <body>
+        <Template>{children}</Template>
+      </body>
     </html>
   );
 }

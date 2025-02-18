@@ -22,13 +22,13 @@ const cardVariants = {
   exit: { opacity: 0, transition: { duration: 0.3, ease: 'easeInOut' } },
 };
 
-// MusicCard component with responsive styles
+// MusicCard component using theme variables for most styling but fixed colors for the loading bar.
 function MusicCard({ song, isPlaying, togglePlay, progress, currentTime, duration }) {
   return (
     <Box
       sx={{
-        backgroundColor: 'black',
-        color: 'white',
+        backgroundColor: 'var(--background)',
+        color: 'var(--foreground)',
         borderRadius: '12px',
         width: { xs: '90%', sm: '400px' },
         p: 3,
@@ -52,21 +52,20 @@ function MusicCard({ song, isPlaying, togglePlay, progress, currentTime, duratio
       <Typography variant="h5" sx={{ mb: 1 }}>
         {song.name}
       </Typography>
-      <Typography variant="subtitle1" sx={{ color: '#888', mb: 2 }}>
+      <Typography variant="subtitle1" sx={{ mb: 2 }}>
         {song.artists}
       </Typography>
       <Button
         variant="contained"
         onClick={togglePlay}
         sx={{
-          backgroundColor: '#4caf50',
           textTransform: 'none',
           mb: 3,
-          '&:hover': { backgroundColor: '#43a047' },
         }}
       >
         {isPlaying ? 'Pause' : 'Play'}
       </Button>
+      {/* Fixed-color progress bar */}
       <Box
         sx={{
           backgroundColor: '#e0e0e0',
@@ -89,7 +88,6 @@ function MusicCard({ song, isPlaying, togglePlay, progress, currentTime, duratio
           display: 'flex',
           justifyContent: 'space-between',
           fontSize: '12px',
-          color: '#b3afaf',
         }}
       >
         <span>{formatTime(currentTime)}</span>
@@ -249,7 +247,7 @@ export default function RatePlaylist() {
 
   if (!playlist) {
     return (
-      <Box sx={{ minHeight: '100vh', backgroundColor: '#2c2c2c', color: '#fff' }}>
+      <Box sx={{ minHeight: '100vh', backgroundColor: 'var(--background)', color: 'var(--foreground)' }}>
         <Navbar />
         <Box sx={{ p: 4, textAlign: 'center' }}>
           <Typography variant="h6">Loading playlist...</Typography>
@@ -261,7 +259,7 @@ export default function RatePlaylist() {
 
   if (receipt) {
     return (
-      <Box sx={{ minHeight: '100vh', backgroundColor: '#2c2c2c', color: '#fff', p: 4 }}>
+      <Box sx={{ minHeight: '100vh', backgroundColor: 'var(--background)', color: 'var(--foreground)', p: 4 }}>
         <Navbar />
         <Box sx={{ maxWidth: 800, mx: 'auto' }}>
           <AnimatePresence>
@@ -274,12 +272,12 @@ export default function RatePlaylist() {
               <Box
                 sx={{
                   p: 4,
-                  backgroundColor: '#fff',
-                  color: '#000',
+                  backgroundColor: 'var(--base-100)',
+                  color: 'var(--foreground)',
                   borderRadius: 2,
                   boxShadow: 3,
                   fontFamily: 'monospace',
-                  border: '2px dashed #666',
+                  border: '2px dashed var(--border-color, currentColor)',
                 }}
               >
                 <Typography variant="h4" gutterBottom sx={{ fontWeight: 'bold' }}>
@@ -287,7 +285,7 @@ export default function RatePlaylist() {
                 </Typography>
                 <Box component="table" sx={{ width: '100%', mb: 2, borderCollapse: 'collapse' }}>
                   <Box component="thead">
-                    <Box component="tr" sx={{ borderBottom: '2px solid #444' }}>
+                    <Box component="tr" sx={{ borderBottom: '2px solid var(--border-color, currentColor)' }}>
                       <Box component="th" sx={{ textAlign: 'left', p: 1 }}>Cover</Box>
                       <Box component="th" sx={{ textAlign: 'left', p: 1 }}>Song</Box>
                       <Box component="th" sx={{ textAlign: 'left', p: 1 }}>Rating</Box>
@@ -298,7 +296,7 @@ export default function RatePlaylist() {
                   </Box>
                   <Box component="tbody">
                     {ratings.map((r, index) => (
-                      <Box key={index} component="tr" sx={{ borderBottom: '1px solid #444', py: 1 }}>
+                      <Box key={index} component="tr" sx={{ borderBottom: '1px solid var(--border-color, currentColor)', py: 1 }}>
                         <Box component="td" sx={{ p: 1 }}>
                           <img
                             src={r.image_url}
@@ -311,14 +309,14 @@ export default function RatePlaylist() {
                             href={`https://open.spotify.com/track/${r.songId}`}
                             target="_blank"
                             rel="noreferrer"
-                            style={{ textDecoration: 'none', color: '#1976d2' }}
+                            style={{ textDecoration: 'none', fontSize: 18, color: 'var(--primary)' }}
                           >
                             {r.songName}
                           </a>
                         </Box>
                         <Box component="td" sx={{ p: 1 }}>
                           {[...Array(r.rating)].map((_, i) => (
-                            <span key={i} style={{ color: '#FFA000', fontSize: 20 }}>★</span>
+                            <span key={i} style={{ color: 'var(--accent)', fontSize: 20 }}>★</span>
                           ))}
                         </Box>
                         <Box
@@ -332,7 +330,7 @@ export default function RatePlaylist() {
                             href={`https://open.spotify.com/track/${r.songId}`}
                             target="_blank"
                             rel="noreferrer"
-                            style={{ color: '#1976d2', textDecoration: 'underline' }}
+                            style={{ color: 'var(--primary)', textDecoration: 'underline' }}
                           >
                             Listen
                           </a>
@@ -378,19 +376,15 @@ export default function RatePlaylist() {
   const isFinalSong = currentIndex === playlist.songs.length - 1;
 
   return (
-    <Box sx={{ minHeight: '100vh', backgroundColor: '#2c2c2c', color: '#fff' }}>
+    <Box sx={{ minHeight: '100vh', backgroundColor: 'var(--background)', color: 'var(--foreground)' }}>
       <Navbar />
       <Box sx={{ p: { xs: 2, sm: 4 }, maxWidth: 800, mx: 'auto' }}>
-        {/* Title now displays the playlist name with a cool gradient */}
         <Typography
           variant="h3"
           sx={{
             fontWeight: 'bold',
             mb: 4,
             textAlign: 'center',
-            background: 'linear-gradient(to right, #9c27b0, #e91e63)',
-            WebkitBackgroundClip: 'text',
-            WebkitTextFillColor: 'transparent',
           }}
         >
           {playlist.name}
@@ -424,7 +418,7 @@ export default function RatePlaylist() {
                     backgroundColor: 'rgba(0,0,0,0.6)',
                   }}
                 >
-                  <Typography variant="h5" sx={{ color: 'white', mb: 2 }}>
+                  <Typography variant="h5" sx={{ mb: 2 }}>
                     Loading receipt...
                   </Typography>
                   <CircularProgress color="inherit" />

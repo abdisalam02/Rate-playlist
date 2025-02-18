@@ -60,7 +60,8 @@ export default function VersusTournament() {
   const playSong = (song) => {
     if (song.preview_url && audioRef.current) {
       audioRef.current.src = song.preview_url;
-      audioRef.current.play()
+      audioRef.current
+        .play()
         .then(() => setPlayingSong(song.id))
         .catch((err) => console.error(err));
     }
@@ -109,18 +110,17 @@ export default function VersusTournament() {
 
   if (!playlist) {
     return (
-      <div>
+      <div className="min-h-screen bg-base-100 text-base-content">
         <Navbar />
-        <p className="p-4 text-white">Loading playlist...</p>
+        <p className="p-4">Loading playlist...</p>
       </div>
     );
   }
 
-  // Bracket phase: show your static bracket with the 8 seeds (quarterfinal) in roundsHistory[0],
-  // plus later rounds if they exist.
+  // Bracket phase
   if (gamePhase === 'bracket') {
     return (
-      <div className="min-h-screen bg-gray-900 text-white">
+      <div className="min-h-screen bg-base-100 text-base-content">
         <Navbar />
         <div className="container mx-auto p-4">
           <h1 className="text-3xl font-bold mb-4">Tournament Bracket</h1>
@@ -135,10 +135,10 @@ export default function VersusTournament() {
     );
   }
 
-  // Winner phase: show champion with confetti, plus the bracket again with the final champion placed in center
+  // Winner phase
   if (gamePhase === 'winner' && winner) {
     return (
-      <div className="min-h-screen bg-gray-900 text-white relative flex flex-col items-center">
+      <div className="min-h-screen bg-base-100 text-base-content relative flex flex-col items-center">
         <Navbar />
         <ReactConfetti
           width={typeof window !== 'undefined' ? window.innerWidth : 0}
@@ -149,17 +149,17 @@ export default function VersusTournament() {
             initial={{ scale: 0.8, opacity: 0, y: -20 }}
             animate={{ scale: 1, opacity: 1, y: 0 }}
             transition={{ duration: 0.7, ease: 'easeOut' }}
-            className="card bg-gray-800 shadow-2xl p-8 text-center rounded-xl"
+            className="card bg-base-200 shadow-2xl p-8 text-center rounded-xl"
           >
             <h2
-              className="card-title text-4xl font-extrabold mb-4 bg-gradient-to-r from-purple-400 to-pink-500 bg-clip-text text-transparent animate-text text-center"
+              className="card-title text-4xl font-extrabold mb-4 bg-gradient-to-r from-primary to-accent bg-clip-text text-transparent animate-text text-center"
             >
               Winner!
             </h2>
             <motion.img
               src={winner.image_url}
               alt={winner.name}
-              className="w-48 h-48 mx-auto rounded-lg object-cover mb-4 border-4 border-transparent hover:border-white transition-all duration-300"
+              className="w-48 h-48 mx-auto rounded-lg object-cover mb-4 border-4 border-transparent hover:border-current transition-all duration-300"
               initial={{ scale: 0.8, opacity: 0 }}
               animate={{ scale: 1, opacity: 1 }}
               transition={{ duration: 0.7, ease: 'easeOut' }}
@@ -174,7 +174,7 @@ export default function VersusTournament() {
             </motion.h3>
             {winner.artist && (
               <motion.p
-                className="text-xl italic mb-4 text-gray-400"
+                className="text-xl italic mb-4 text-base-content/70"
                 initial={{ y: 20, opacity: 0 }}
                 animate={{ y: 0, opacity: 1 }}
                 transition={{ delay: 0.4, duration: 0.5 }}
@@ -186,7 +186,7 @@ export default function VersusTournament() {
               href={`https://open.spotify.com/track/${winner.id}`}
               target="_blank"
               rel="noreferrer"
-              className="btn btn-primary text-white px-6 py-2 rounded-md shadow-md"
+              className="btn btn-primary px-6 py-2 rounded-md shadow-md"
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               transition={{ delay: 0.5, duration: 0.5 }}
@@ -201,20 +201,19 @@ export default function VersusTournament() {
       </div>
     );
   }
-  
 
-  // Match phase: pick the current pair
+  // Match phase
   const matchIndex = currentMatchIndex * 2;
   const songA = currentRound[matchIndex];
   const songB = currentRound[matchIndex + 1];
 
   if (!songB) {
     handleWinnerSelection(songA);
-    return <div className="p-4 text-white">Advancing...</div>;
+    return <div className="p-4">Advancing...</div>;
   }
 
   return (
-    <div className="min-h-screen bg-gray-900 text-white">
+    <div className="min-h-screen bg-base-100 text-base-content">
       <Navbar />
       <div className="container mx-auto p-4">
         <h1 className="text-3xl font-bold mb-4">Versus Tournament</h1>
@@ -228,7 +227,7 @@ export default function VersusTournament() {
             initial={{ opacity: 0, x: -50 }}
             animate={{ opacity: 1, x: 0 }}
             transition={{ duration: 0.4 }}
-            className="card bg-gray-800 shadow-xl w-full sm:w-1/2 relative"
+            className="card bg-base-200 shadow-xl w-full sm:w-1/2 relative"
           >
             <figure className="relative">
               <img
@@ -250,7 +249,7 @@ export default function VersusTournament() {
             </figure>
             <div className="card-body text-center">
               <h2 className="card-title">{songA.name}</h2>
-              {songA.artist && <p className="text-sm text-gray-400">{songA.artist}</p>}
+              {songA.artist && <p className="text-sm text-base-content/70">{songA.artist}</p>}
               <button onClick={() => handleWinnerSelection(songA)} className="btn btn-secondary mt-4">
                 Choose
               </button>
@@ -262,7 +261,7 @@ export default function VersusTournament() {
               initial={{ scale: 0.8, opacity: 0 }}
               animate={{ scale: 1, opacity: 1 }}
               transition={{ duration: 0.5 }}
-              className="text-4xl font-extrabold bg-gradient-to-r from-purple-400 via-pink-500 to-red-500 bg-clip-text text-transparent"
+              className="text-4xl font-extrabold bg-gradient-to-r from-primary to-accent bg-clip-text text-transparent"
             >
               VS
             </motion.span>
@@ -273,7 +272,7 @@ export default function VersusTournament() {
             initial={{ opacity: 0, x: 50 }}
             animate={{ opacity: 1, x: 0 }}
             transition={{ duration: 0.4 }}
-            className="card bg-gray-800 shadow-xl w-full sm:w-1/2 relative"
+            className="card bg-base-200 shadow-xl w-full sm:w-1/2 relative"
           >
             <figure className="relative">
               <img
@@ -295,7 +294,7 @@ export default function VersusTournament() {
             </figure>
             <div className="card-body text-center">
               <h2 className="card-title">{songB.name}</h2>
-              {songB.artist && <p className="text-sm text-gray-400">{songB.artist}</p>}
+              {songB.artist && <p className="text-sm text-base-content/70">{songB.artist}</p>}
               <button onClick={() => handleWinnerSelection(songB)} className="btn btn-secondary mt-4">
                 Choose
               </button>

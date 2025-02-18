@@ -16,7 +16,7 @@ function getArtists(song) {
   return song.artists.split(',').map((a) => a.toLowerCase().trim());
 }
 
-// Turntable component using your provided "spinny" CSS classes.
+// Turntable component using provided "spinny" CSS classes.
 function Turntable() {
   return (
     <div className="spinny mb-6">
@@ -25,14 +25,14 @@ function Turntable() {
   );
 }
 
-// OptionCard component now always shows the song name and artists.
+// OptionCard component always showing song name and artists, with no hard-coded colors.
 function OptionCard({ option, onSelect, selected, correct }) {
   let cardClass =
-    'card w-full bg-gray-800 shadow-md transition-all cursor-pointer';
+    'card w-full bg-base-200 shadow-md transition-all cursor-pointer';
   if (selected) {
     cardClass += correct
-      ? ' border-2 border-green-500'
-      : ' border-2 border-red-500';
+      ? ' border-2 border-success'
+      : ' border-2 border-error';
   } else {
     cardClass += ' border border-transparent hover:border-primary';
   }
@@ -54,11 +54,11 @@ function OptionCard({ option, onSelect, selected, correct }) {
         />
       </figure>
       <div className="card-body items-center text-center p-2">
-        <h2 className="card-title text-lg font-bold text-white">
+        <h2 className="card-title text-lg font-bold text-base-content">
           {option.name}
         </h2>
         {option.artists && (
-          <p className="text-sm text-gray-300">{option.artists}</p>
+          <p className="text-sm text-base-content/70">{option.artists}</p>
         )}
       </div>
     </motion.div>
@@ -207,11 +207,14 @@ export default function GuessGame() {
   const accuracy = rounds.length > 0 ? Math.round((score / rounds.length) * 100) : 0;
 
   return (
-    <div className="min-h-screen bg-gray-900 text-white relative">
+    <div className="min-h-screen bg-base-100 text-base-content relative">
       <Navbar />
       <audio ref={audioRef} style={{ display: 'none' }} preload="auto" />
       {phase === 'final' && (
-        <ReactConfetti width={window.innerWidth} height={window.innerHeight} />
+        <ReactConfetti
+          width={typeof window !== 'undefined' ? window.innerWidth : 0}
+          height={typeof window !== 'undefined' ? window.innerHeight : 0}
+        />
       )}
       <div className="container mx-auto p-6 flex flex-col items-center">
         <AnimatePresence mode="wait">
@@ -288,7 +291,7 @@ export default function GuessGame() {
                 <h3 className="font-semibold mb-2">Round Details:</h3>
                 <ul className="text-sm space-y-1">
                   {roundResults.map((result, index) => (
-                    <li key={index} className="border-b border-gray-700 pb-1">
+                    <li key={index} className="border-b border-base-content/50 pb-1">
                       <span className="font-semibold">Round {index + 1}:</span>{' '}
                       {result.correct ? 'Correct' : 'Wrong'} - Correct: {result.correctSong.name} ({result.correctSong.artists})
                     </li>
@@ -311,7 +314,6 @@ export default function GuessGame() {
           )}
         </AnimatePresence>
       </div>
-      {/* Global CSS */}
       <style jsx global>{`
         /* Turntable styles with slower rotation */
         .spinny {
@@ -346,10 +348,10 @@ export default function GuessGame() {
             transform: rotate(360deg);
           }
         }
-        /* Receipt style for final results */
+        /* Receipt style for final results using theme variables */
         .receipt {
-          background: #1f2937;
-          border: 1px dashed #4b5563;
+          background: var(--base-100);
+          border: 1px dashed var(--border-color, currentColor);
           padding: 1.5rem;
           border-radius: 0.5rem;
         }
@@ -357,3 +359,4 @@ export default function GuessGame() {
     </div>
   );
 }
+  

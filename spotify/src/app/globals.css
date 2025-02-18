@@ -4,7 +4,7 @@
 
 /* Override body background when using bg-music-pattern */
 body.bg-music-pattern {
-  background: radial-gradient(circle at top left, #1f1c2c, #928dab) !important;
+  background: var(--background);
   background-attachment: fixed;
 }
 
@@ -14,7 +14,6 @@ body {
   background: var(--background);
   font-family: Arial, Helvetica, sans-serif;
 }
-
 /* StarRating Component Styles */
 .feedback {
   max-width: 360px;
