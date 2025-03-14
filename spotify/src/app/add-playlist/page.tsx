@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Navbar from '@/app/components/Navbar';
+import { motion } from 'framer-motion';
 
 export default function AddPlaylist() {
   const [playlistUrl, setPlaylistUrl] = useState('');
@@ -35,54 +36,82 @@ export default function AddPlaylist() {
   };
 
   return (
-    <div className="min-h-screen bg-gray-900 text-white">
+    <div className="min-h-screen bg-gradient-to-b from-[#121212] to-[#121212]">
       <Navbar />
-      <div className="flex items-center justify-center py-10">
-        <div className="card w-full max-w-md bg-gray-800 shadow-xl">
-          <div className="card-body">
-            <h2 className="card-title mb-4">Add Playlist</h2>
-            <form onSubmit={handleSubmit}>
-              <div className="form-control mb-4">
-                <label className="label">
-                  <span className="label-text">Your Name</span>
+      <div className="container mx-auto px-4 py-12">
+        <motion.div
+          initial={{ opacity: 0, y: -20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.6 }}
+          className="max-w-md mx-auto"
+        >
+          <div className="bg-[#181818] rounded-lg p-6 shadow-xl">
+            <h1 className="text-2xl font-bold mb-6 text-white">Add Playlist</h1>
+            
+            <form onSubmit={handleSubmit} className="space-y-6">
+              <div>
+                <label className="block text-[#B3B3B3] text-sm font-medium mb-2">
+                  Your Name
                 </label>
                 <input
                   type="text"
                   placeholder="Enter your name"
-                  className="input input-bordered"
+                  className="w-full bg-[#282828] text-white border-none rounded-md py-3 px-4 focus:ring-2 focus:ring-[#1DB954] focus:outline-none"
                   value={userName}
                   onChange={(e) => setUserName(e.target.value)}
                   required
                 />
               </div>
-              <div className="form-control mb-4">
-                <label className="label">
-                  <span className="label-text">Spotify Playlist URL</span>
+              
+              <div>
+                <label className="block text-[#B3B3B3] text-sm font-medium mb-2">
+                  Spotify Playlist URL
                 </label>
                 <input
                   type="text"
-                  placeholder="Enter playlist URL"
-                  className="input input-bordered"
+                  placeholder="https://open.spotify.com/playlist/..."
+                  className="w-full bg-[#282828] text-white border-none rounded-md py-3 px-4 focus:ring-2 focus:ring-[#1DB954] focus:outline-none"
                   value={playlistUrl}
                   onChange={(e) => setPlaylistUrl(e.target.value)}
                   required
                 />
+                <p className="mt-2 text-xs text-[#B3B3B3]">
+                  Paste the full URL of a public Spotify playlist
+                </p>
               </div>
-              {error && <p className="text-red-500 mb-4">{error}</p>}
-              <div className="card-actions justify-end">
-                <button type="submit" className="btn btn-primary" disabled={loading}>
-                  {loading ? (
-                    <>
-                      <span className="loading loading-spinner"></span> Adding...
-                    </>
-                  ) : (
-                    'Add Playlist'
-                  )}
-                </button>
-              </div>
+              
+              {error && (
+                <div className="bg-red-900/50 text-red-200 p-3 rounded-md">
+                  {error}
+                </div>
+              )}
+              
+              <button
+                type="submit"
+                disabled={loading}
+                className="w-full bg-[#1DB954] text-black font-bold py-3 px-4 rounded-full hover:scale-105 transition-transform duration-200 disabled:opacity-70 disabled:cursor-not-allowed"
+              >
+                {loading ? (
+                  <div className="flex items-center justify-center">
+                    <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-black" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg>
+                    Adding...
+                  </div>
+                ) : (
+                  'Add Playlist'
+                )}
+              </button>
             </form>
           </div>
-        </div>
+          
+          <div className="mt-8 text-center">
+            <p className="text-[#B3B3B3] text-sm">
+              Need help? <a href="#" className="text-[#1DB954] hover:underline">Learn how to find your playlist URL</a>
+            </p>
+          </div>
+        </motion.div>
       </div>
     </div>
   );

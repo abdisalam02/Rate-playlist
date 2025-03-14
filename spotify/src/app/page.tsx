@@ -4,6 +4,20 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import Navbar from '@/app/components/Navbar';
 import { motion, AnimatePresence } from 'framer-motion';
+import SafeImage from './components/SafeImage';
+
+// Simple Play/Pause icons
+const PlayIcon = () => (
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-6 h-6">
+    <path fillRule="evenodd" d="M4.5 5.653c0-1.426 1.529-2.33 2.779-1.643l11.54 6.348c1.295.712 1.295 2.573 0 3.285L7.28 19.991c-1.25.687-2.779-.217-2.779-1.643V5.653z" clipRule="evenodd" />
+  </svg>
+);
+
+const PauseIcon = () => (
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-6 h-6">
+    <path fillRule="evenodd" d="M6.75 5.25a.75.75 0 01.75-.75H9a.75.75 0 01.75.75v13.5a.75.75 0 01-.75.75H7.5a.75.75 0 01-.75-.75V5.25zm7.5 0A.75.75 0 0115 4.5h1.5a.75.75 0 01.75.75v13.5a.75.75 0 01-.75.75H15a.75.75 0 01-.75-.75V5.25z" clipRule="evenodd" />
+  </svg>
+);
 
 // Helper: Get the first artist and song title.
 function parseSongDetails(song) {
@@ -16,171 +30,193 @@ function parseSongDetails(song) {
   return { artist, title: song.name };
 }
 
-// RatingIcon: Displays an emoji based on rating.
+// RatingIcon: Displays stars based on rating.
 function RatingIcon({ rating }) {
-  const sizeClass = "text-5xl";
-  if (rating >= 4.5) return <span className={sizeClass}>🤩</span>;
-  if (rating >= 4.0) return <span className={sizeClass}>😎</span>;
-  if (rating >= 3.0) return <span className={sizeClass}>🙂</span>;
-  return <span className={sizeClass}>😵</span>;
+  const sizeClass = "text-3xl";
+  if (rating >= 4.5) return <span className={`${sizeClass} text-[#1DB954]`}>★★★★★</span>;
+  if (rating >= 4.0) return <span className={`${sizeClass} text-[#1DB954]`}>★★★★☆</span>;
+  if (rating >= 3.0) return <span className={`${sizeClass} text-[#1DB954]`}>★★★☆☆</span>;
+  if (rating >= 2.0) return <span className={`${sizeClass} text-[#1DB954]`}>★★☆☆☆</span>;
+  return <span className={`${sizeClass} text-[#1DB954]`}>★☆☆☆☆</span>;
 }
 
-// Framer Motion variants for the dropdown buttons.
-const buttonVariants = {
-  hidden: { opacity: 0, y: 10 },
-  visible: (custom) => ({
-    opacity: 1,
-    y: 0,
-    transition: { delay: custom * 0.1, duration: 0.3 }
-  }),
-};
-
-// Revamped PlaylistCard component.
+// Improved PlaylistCard component with better mobile interaction
 function PlaylistCard({ playlist }) {
-  const [expanded, setExpanded] = useState(false);
-
-  const toggleDropdown = (e) => {
-    e.stopPropagation();
-    setExpanded((prev) => !prev);
-  };
+  const [showOptions, setShowOptions] = useState(false);
+  const [isPlaying, setIsPlaying] = useState(false);
+  
+  // Game options for the playlist
+  const gameOptions = [
+    { name: 'Rate', href: `/rate/${playlist.id}`, color: 'bg-purple-600' },
+    { name: 'Versus', href: `/versus/${playlist.id}`, color: 'bg-blue-600' },
+    { name: 'Guess', href: `/guess/${playlist.id}`, color: 'bg-orange-600' },
+    { name: 'Lyrics', href: `/lyrics/${playlist.id}`, color: 'bg-pink-600' }
+  ];
 
   return (
-    <div className="card bg-base-100 shadow-lg rounded-xl overflow-hidden transition-all duration-300 hover:scale-105">
-      <figure className="relative">
-        <motion.img
-          whileHover={{ scale: 1.05 }}
-          src={playlist.image_url || '/placeholder.png'}
-          alt={playlist.name}
-          className="object-cover w-full h-48" // Updated image height
-        />
-        {/* Optional overlay to darken image slightly */}
-        <div className="absolute inset-0 bg-black bg-opacity-20" />
-      </figure>
-      <div className="card-body p-6 relative">
-      <h2 className="card-title text-2xl font-bold text-base-content">
-      {playlist.name}
-        </h2>
+    <motion.div 
+      className="bg-[#181818] rounded-lg overflow-hidden transition-all duration-300 h-full relative"
+      whileHover={{ y: -4, backgroundColor: '#282828' }}
+    >
+      {/* Card content */}
+      <div className="relative">
+        <div className="aspect-square">
+          <img
+            src={playlist.image_url || '/placeholder.png'}
+            alt={playlist.name}
+            className="w-full h-full object-cover"
+          />
+        </div>
+        
+        {/* Play button overlay */}
+        <div className="absolute inset-0 bg-black/40 opacity-0 hover:opacity-100 transition-opacity flex items-center justify-center">
+          <button 
+            onClick={() => setIsPlaying(!isPlaying)}
+            className="bg-[#1DB954] rounded-full p-3 shadow-lg hover:scale-110 transition-transform"
+          >
+            {isPlaying ? <PauseIcon /> : <PlayIcon />}
+          </button>
+        </div>
+        
+        {/* Options button - always visible */}
+        <button 
+          onClick={() => setShowOptions(!showOptions)}
+          className="absolute bottom-4 right-4 bg-[#1DB954] rounded-full p-2 shadow-lg hover:scale-110 transition-transform"
+        >
+          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5">
+            <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 6.75h16.5M3.75 12h16.5m-16.5 5.25h16.5" />
+          </svg>
+        </button>
+      </div>
+      
+      <div className="p-4">
+        <h2 className="font-bold text-xl text-white truncate">{playlist.name}</h2>
+        
         {playlist.user_name && (
-          <p className="text-sm text-base-content/70 mt-1">Added by: {playlist.user_name}</p>
+          <p className="text-[#B3B3B3] text-sm mt-1">Added by {playlist.user_name}</p>
         )}
+        
         {playlist.songs && (
-          <p className="text-sm text-gray-600 mt-1">Tracks: {playlist.songs.length}</p>
+          <p className="text-[#B3B3B3] text-sm mt-1">{playlist.songs.length} tracks</p>
         )}
+        
         {playlist.averageRating !== null && (
-          <div className="flex items-center space-x-3 mt-3">
+          <div className="flex items-center mt-3">
             <RatingIcon rating={playlist.averageRating} />
-            <span className="text-lg text-gray-600">{playlist.averageRating.toFixed(1)}</span>
+            <span className="ml-2 text-[#B3B3B3]">{playlist.averageRating.toFixed(1)}</span>
           </div>
         )}
-
-        {/* Dropdown toggle: Using up/down arrow icons */}
-        <button
-          onClick={toggleDropdown}
-          className="absolute top-4 right-4 p-2 rounded-full bg-gray-200 hover:bg-gray-300 transition-colors"
-          aria-label="Toggle actions"
-        >
-          {expanded ? (
-            // Up arrow icon
-            <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-gray-700" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 15l7-7 7 7" />
-            </svg>
-          ) : (
-            // Down arrow icon
-            <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-gray-700" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-            </svg>
-          )}
-        </button>
-
-        <AnimatePresence>
-          {expanded && (
-            <motion.div
-              key="dropdown"
-              initial={{ opacity: 0, height: 0 }}
-              animate={{ opacity: 1, height: 'auto' }}
-              exit={{ opacity: 0, height: 0 }}
-              transition={{ duration: 0.3, ease: 'easeInOut' }}
-              className="mt-6 overflow-hidden"
-              onClick={(e) => e.stopPropagation()}
-            >
-              <div className="grid grid-cols-2 gap-4">
-                <motion.div custom={0.1} variants={buttonVariants} initial="hidden" animate="visible">
-                  <Link href={`/rate/${playlist.id}`} className="btn btn-primary btn-md w-full flex items-center justify-center gap-2">
-                    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="currentColor" viewBox="0 0 20 20">
-                      <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.286 3.97a1 1 0 00.95.69h4.175c.969 0 1.371 1.24.588 1.81l-3.38 2.455a1 1 0 00-.364 1.118l1.286 3.97c.3.921-.755 1.688-1.54 1.118l-3.38-2.455a1 1 0 00-1.175 0l-3.38 2.455c-.784.57-1.838-.197-1.54-1.118l1.286-3.97a1 1 0 00-.364-1.118L2.24 9.397c-.783-.57-.38-1.81.588-1.81h4.175a1 1 0 00.95-.69l1.286-3.97z" />
-                    </svg>
-                    Rate
-                  </Link>
-                </motion.div>
-                <motion.div custom={0.2} variants={buttonVariants} initial="hidden" animate="visible">
-                  <Link href={`/versus/${playlist.id}`} className="btn btn-secondary btn-md w-full flex items-center justify-center gap-2">
-                    <span className="font-bold text-lg">VS</span>
-                    Versus
-                  </Link>
-                </motion.div>
-                <motion.div custom={0.3} variants={buttonVariants} initial="hidden" animate="visible">
-                  <Link href={`/guess/${playlist.id}`} className="btn btn-accent btn-md w-full flex items-center justify-center gap-2">
-                    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="currentColor" viewBox="0 0 20 20">
-                      <path d="M18 10c0 4.418-3.582 8-8 8s-8-3.582-8-8 3.582-8 8-8 8 3.582 8 8zm-8-4a1 1 0 00-1 1v1a1 1 0 002 0V7a1 1 0 00-1-1zm1 6a1 1 0 10-2 0v1a1 1 0 002 0v-1z" />
-                    </svg>
-                    Guess
-                  </Link>
-                </motion.div>
-                <motion.div custom={0.4} variants={buttonVariants} initial="hidden" animate="visible">
-                  <Link href={`/lyrics/${playlist.id}`} className="btn btn-info btn-md w-full flex items-center justify-center gap-2">
-                    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="currentColor" viewBox="0 0 20 20">
-                      <path d="M9 4.804V13a1 1 0 001.447.894l5-3a1 1 0 000-1.788l-5-3A1 1 0 009 4.804z" />
-                      <path d="M7 3a1 1 0 00-1 1v10a1 1 0 001.447.894l5-3A1 1 0 0013 11V4a1 1 0 00-1-1H7z" />
-                    </svg>
-                    Lyrics
-                  </Link>
-                </motion.div>
-              </div>
-            </motion.div>
-          )}
-        </AnimatePresence>
       </div>
-    </div>
+      
+      {/* Game options dropdown */}
+      <AnimatePresence>
+        {showOptions && (
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 20 }}
+            className="absolute inset-0 bg-black/80 backdrop-blur-sm flex flex-col items-center justify-center p-4 z-10"
+          >
+            <h3 className="text-xl font-bold mb-6">Play Games</h3>
+            <div className="grid grid-cols-2 gap-3 w-full">
+              {gameOptions.map((option, index) => (
+                <Link 
+                  key={option.name}
+                  href={option.href}
+                  className={`${option.color} text-white font-medium py-3 px-4 rounded-md flex items-center justify-center hover:brightness-110 transition-all text-center`}
+                >
+                  {option.name}
+                </Link>
+              ))}
+            </div>
+            <button 
+              onClick={() => setShowOptions(false)}
+              className="mt-6 text-white hover:text-[#1DB954] transition-colors"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-8 h-8">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </motion.div>
   );
 }
 
 export default function Home() {
   const [playlists, setPlaylists] = useState([]);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     fetch('/api/playlists')
       .then((res) => res.json())
-      .then((data) => setPlaylists(data));
+      .then((data) => {
+        setPlaylists(data);
+        setLoading(false);
+      })
+      .catch(err => {
+        console.error(err);
+        setLoading(false);
+      });
   }, []);
 
   return (
-    <div className="min-h-screen bg-base-100 text-base-content">
+    <div className="min-h-screen bg-gradient-to-b from-[#121212] to-[#121212]">
       <Navbar />
-      <div className="container mx-auto px-6 py-12">
-        <motion.h1
+      
+      <div className="container mx-auto px-4 py-8">
+        <motion.div
           initial={{ opacity: 0, y: -20 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.8 }}
-          className="text-center text-4xl md:text-5xl font-bold mb-10 text-base-content"
+          transition={{ duration: 0.6 }}
+          className="text-center mb-12"
         >
-          My Playlists
-        </motion.h1>
-        <div className="flex justify-center mb-10">
-          <Link href="/add-playlist" className="btn btn-outline btn-lg hover:btn-info transition-all shadow-md">
+          <h1 className="text-5xl font-bold mb-4 bg-clip-text text-transparent bg-gradient-to-r from-[#1DB954] to-[#4caf50]">
+            My Playlists
+          </h1>
+          <p className="text-[#B3B3B3] text-lg max-w-2xl mx-auto">
+            Explore your playlists, rate songs, play games, and discover new music
+          </p>
+        </motion.div>
+        
+        <div className="flex justify-center mb-12">
+          <Link href="/add-playlist" className="bg-[#1DB954] text-black font-bold py-3 px-8 rounded-full hover:scale-105 transition-transform duration-200 flex items-center">
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2" viewBox="0 0 20 20" fill="currentColor">
+              <path fillRule="evenodd" d="M10 3a1 1 0 011 1v5h5a1 1 0 110 2h-5v5a1 1 0 11-2 0v-5H4a1 1 0 110-2h5V4a1 1 0 011-1z" clipRule="evenodd" />
+            </svg>
             Add Playlist
           </Link>
         </div>
-        <div className="grid gap-8 grid-cols-1 md:grid-cols-3">
-          {playlists.length > 0 ? (
-            playlists.map((playlist) => (
-              <PlaylistCard key={playlist.id} playlist={playlist} />
-            ))
-          ) : (
-            <p className="text-center text-xl text-gray-500">
-              No playlists added yet.
-            </p>
-          )}
-        </div>
+        
+        {loading ? (
+          <div className="flex justify-center items-center h-64">
+            <div className="animate-spin rounded-full h-16 w-16 border-t-2 border-b-2 border-[#1DB954]"></div>
+          </div>
+        ) : (
+          <>
+            {playlists.length > 0 ? (
+              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-6">
+                {playlists.map((playlist) => (
+                  <PlaylistCard key={playlist.id} playlist={playlist} />
+                ))}
+              </div>
+            ) : (
+              <div className="text-center py-16 bg-[#181818] rounded-lg">
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-16 w-16 mx-auto text-[#B3B3B3] mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zm12-3c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zM9 10l12-3" />
+                </svg>
+                <p className="text-xl text-[#B3B3B3] mb-4">No playlists added yet</p>
+                <Link href="/add-playlist" className="inline-flex items-center text-[#1DB954] hover:underline">
+                  <span>Add your first playlist</span>
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 ml-1" viewBox="0 0 20 20" fill="currentColor">
+                    <path fillRule="evenodd" d="M10.293 5.293a1 1 0 011.414 0l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414-1.414L12.586 11H5a1 1 0 110-2h7.586l-2.293-2.293a1 1 0 010-1.414z" clipRule="evenodd" />
+                  </svg>
+                </Link>
+              </div>
+            )}
+          </>
+        )}
       </div>
     </div>
   );

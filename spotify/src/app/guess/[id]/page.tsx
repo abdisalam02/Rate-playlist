@@ -1,11 +1,11 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
-import { useParams } from 'next/navigation';
+import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { motion, AnimatePresence } from 'framer-motion';
 import Navbar from '@/app/components/Navbar';
-import ReactConfetti from 'react-confetti';
+import Confetti from 'react-confetti';
 
 // Helper: Parse the artists field into an array of lowercase artist names.
 function getArtists(song) {
@@ -65,297 +65,464 @@ function OptionCard({ option, onSelect, selected, correct }) {
   );
 }
 
-export default function GuessGame() {
+// Music wave animation component
+function MusicWaveIndicator() {
+  return (
+    <div className="flex space-x-1 items-end h-6">
+      {[0, 0.2, 0.4, 0.6, 0.8].map((delay, index) => (
+        <motion.div 
+          key={index}
+          className="w-1 bg-[#1DB954] rounded-full"
+          animate={{ height: ["8px", "24px", "8px"] }}
+          transition={{ 
+            duration: 0.8, 
+            repeat: Infinity, 
+            delay: delay,
+            ease: "easeInOut" 
+          }}
+        />
+      ))}
+    </div>
+  );
+}
+
+// Format time helper
+function formatTime(seconds: number): string {
+  const mins = Math.floor(seconds / 60);
+  const secs = Math.floor(seconds % 60);
+  return `${mins}:${secs < 10 ? '0' : ''}${secs}`;
+}
+
+export default function GuessTheSong() {
   const { id } = useParams();
+  const router = useRouter();
+  const [playlist, setPlaylist] = useState<any>(null);
+  const [songs, setSongs] = useState<any[]>([]);
+  const [currentSong, setCurrentSong] = useState<any>(null);
+  const [options, setOptions] = useState<any[]>([]);
+  const [selectedOption, setSelectedOption] = useState<string | null>(null);
+  const [isCorrect, setIsCorrect] = useState<boolean | null>(null);
+  const [score, setScore] = useState<number>(0);
+  const [round, setRound] = useState<number>(1);
+  const [gameOver, setGameOver] = useState<boolean>(false);
+  const [isPlaying, setIsPlaying] = useState<boolean>(false);
+  const [progress, setProgress] = useState<number>(0);
+  const [duration, setDuration] = useState<number>(0);
+  const [currentTime, setCurrentTime] = useState<number>(0);
+  const [loading, setLoading] = useState<boolean>(true);
+  const [showConfetti, setShowConfetti] = useState<boolean>(false);
+  
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+  const progressInterval = useRef<NodeJS.Timeout | null>(null);
+  const MAX_ROUNDS = 10;
 
-  // Phases: 'intro', 'question', 'final'
-  const [phase, setPhase] = useState('intro');
-  const [playlist, setPlaylist] = useState(null);
-  const [rounds, setRounds] = useState([]); // Each round: { correctSong, options: [song, ...] }
-  const [currentRoundIndex, setCurrentRoundIndex] = useState(0);
-  const [selectedOption, setSelectedOption] = useState(null);
-  const [score, setScore] = useState(0);
-  const [roundResults, setRoundResults] = useState([]); // { correct: boolean, correctSong, selectedSong }
-
-  // Audio state
-  const audioRef = useRef(null);
-  const [isPlaying, setIsPlaying] = useState(false);
-
-  // Helper: Generate rounds from songs that have a preview.
-  // For each round, after selecting a correct song, force in another song by the same artist if available.
-  const generateRounds = (songs) => {
-    const validSongs = songs.filter((song) => song.preview_url);
-    if (validSongs.length === 0) return [];
-    const numRounds = Math.min(5, validSongs.length);
-    let generatedRounds = [];
-    for (let i = 0; i < numRounds; i++) {
-      // Pick a correct song at random.
-      const correctSong =
-        validSongs[Math.floor(Math.random() * validSongs.length)];
-      let options = [correctSong];
-
-      // Find another song with at least one matching artist.
-      const correctArtists = getArtists(correctSong);
-      const sameArtistSongs = validSongs.filter(
-        (s) =>
-          s.id !== correctSong.id &&
-          getArtists(s).some((artist) => correctArtists.includes(artist))
-      );
-      if (sameArtistSongs.length > 0) {
-        const forcedOption =
-          sameArtistSongs[Math.floor(Math.random() * sameArtistSongs.length)];
-        options.push(forcedOption);
-      }
-      // Fill the remaining options randomly until we have 4.
-      while (options.length < 4) {
-        const option =
-          validSongs[Math.floor(Math.random() * validSongs.length)];
-        if (!options.some((o) => o.id === option.id)) {
-          options.push(option);
-        }
-      }
-      // Shuffle the options.
-      options.sort(() => 0.5 - Math.random());
-      generatedRounds.push({ correctSong, options });
-    }
-    return generatedRounds;
-  };
-
-  // Fetch playlist and generate rounds on mount.
+  // Load playlist data
   useEffect(() => {
     if (id) {
       fetch(`/api/playlists/${id}`)
-        .then((res) => res.json())
-        .then((data) => {
+        .then(res => res.json())
+        .then(data => {
           setPlaylist(data);
-          const songs = data.songs || [];
-          const rounds = generateRounds(songs);
-          setRounds(rounds);
+          // Shuffle and limit to MAX_ROUNDS songs
+          const shuffledSongs = [...data.songs].sort(() => 0.5 - Math.random()).slice(0, MAX_ROUNDS);
+          setSongs(shuffledSongs);
+          setLoading(false);
+        })
+        .catch(err => {
+          console.error('Error fetching playlist:', err);
+          setLoading(false);
         });
     }
   }, [id]);
 
-  // When in 'question' phase, load and play the correct song preview.
+  // Set up first round
   useEffect(() => {
-    if (phase === 'question' && rounds.length > 0) {
-      const currentQuestion = rounds[currentRoundIndex];
-      if (audioRef.current && currentQuestion.correctSong.preview_url) {
-        audioRef.current.src = currentQuestion.correctSong.preview_url;
-        audioRef.current.load();
-        audioRef.current.onloadeddata = () => {
-          audioRef.current.loop = true;
-          audioRef.current
-            .play()
-            .then(() => setIsPlaying(true))
-            .catch((err) => console.error(err));
-        };
-      }
+    if (songs.length > 0 && !currentSong) {
+      setupRound(songs[0]);
     }
-  }, [phase, currentRoundIndex, rounds]);
+  }, [songs]);
 
-  // When an option is selected, reveal its info, save round result, and advance.
-  const handleOptionSelect = (option) => {
-    if (!option.preview_url) return;
-    if (selectedOption !== null) return;
+  // Audio event handlers
+  useEffect(() => {
+    const audio = audioRef.current;
+    
+    if (audio) {
+      const handleLoadedMetadata = () => {
+        setDuration(audio.duration);
+        // Auto-play when loaded
+        audio.play().catch(e => console.log('Auto-play prevented:', e));
+      };
+      
+      const handleTimeUpdate = () => {
+        setCurrentTime(audio.currentTime);
+        setProgress((audio.currentTime / audio.duration) * 100);
+      };
+      
+      const handlePlay = () => setIsPlaying(true);
+      const handlePause = () => setIsPlaying(false);
+      const handleEnded = () => setIsPlaying(false);
+      
+      audio.addEventListener('loadedmetadata', handleLoadedMetadata);
+      audio.addEventListener('timeupdate', handleTimeUpdate);
+      audio.addEventListener('play', handlePlay);
+      audio.addEventListener('pause', handlePause);
+      audio.addEventListener('ended', handleEnded);
+      
+      return () => {
+        audio.removeEventListener('loadedmetadata', handleLoadedMetadata);
+        audio.removeEventListener('timeupdate', handleTimeUpdate);
+        audio.removeEventListener('play', handlePlay);
+        audio.removeEventListener('pause', handlePause);
+        audio.removeEventListener('ended', handleEnded);
+      };
+    }
+  }, [currentSong]);
+
+  // Clean up on unmount
+  useEffect(() => {
+    return () => {
+      if (progressInterval.current) {
+        clearInterval(progressInterval.current);
+      }
+      if (audioRef.current) {
+        audioRef.current.pause();
+      }
+    };
+  }, []);
+
+  // Setup a new round
+  const setupRound = (song: any) => {
+    setCurrentSong(song);
+    setSelectedOption(null);
+    setIsCorrect(null);
+    
+    // Create options (1 correct, 3 random)
+    const incorrectOptions = songs
+      .filter(s => s.id !== song.id)
+      .sort(() => 0.5 - Math.random())
+      .slice(0, 3);
+    
+    const allOptions = [...incorrectOptions, song].sort(() => 0.5 - Math.random());
+    setOptions(allOptions);
+  };
+
+  // Handle option selection
+  const handleOptionSelect = (option: any) => {
+    if (selectedOption) return; // Prevent multiple selections
+    
     setSelectedOption(option.id);
-    const currentQuestion = rounds[currentRoundIndex];
-    const isCorrect = option.id === currentQuestion.correctSong.id;
-    setRoundResults((prev) => [
-      ...prev,
-      {
-        correct: isCorrect,
-        correctSong: currentQuestion.correctSong,
-        selectedSong: option,
-      },
-    ]);
-    if (isCorrect) {
-      setScore((prev) => prev + 1);
+    const correct = option.id === currentSong.id;
+    setIsCorrect(correct);
+    
+    if (correct) {
+      setScore(prev => prev + 1);
+      setShowConfetti(true);
+      setTimeout(() => setShowConfetti(false), 3000);
     }
-    if (audioRef.current) {
-      audioRef.current.pause();
-      setIsPlaying(false);
-    }
+    
+    // Move to next round after delay
     setTimeout(() => {
-      setSelectedOption(null);
-      if (currentRoundIndex < rounds.length - 1) {
-        setCurrentRoundIndex((prev) => prev + 1);
-        setPhase('question');
+      if (round < songs.length) {
+        setRound(prev => prev + 1);
+        setupRound(songs[round]);
       } else {
-        setPhase('final');
+        setGameOver(true);
       }
-    }, 1500);
+    }, 2000);
   };
 
-  // Reset game for replay.
-  const resetGame = () => {
-    setPhase('intro');
+  // Toggle play/pause
+  const togglePlay = () => {
+    if (!audioRef.current) return;
+    
+    if (isPlaying) {
+      audioRef.current.pause();
+    } else {
+      audioRef.current.play().catch(e => console.log('Play prevented:', e));
+    }
+  };
+
+  // Restart game
+  const handleRestart = () => {
+    setRound(1);
     setScore(0);
-    setCurrentRoundIndex(0);
-    setRounds([]);
-    setPlaylist(null);
-    setRoundResults([]);
-    fetch(`/api/playlists/${id}`)
-      .then((res) => res.json())
-      .then((data) => {
-        setPlaylist(data);
-        const songs = data.songs || [];
-        const rounds = generateRounds(songs);
-        setRounds(rounds);
-      });
+    setGameOver(false);
+    setSelectedOption(null);
+    setIsCorrect(null);
+    
+    // Reshuffle songs
+    const shuffledSongs = [...songs].sort(() => 0.5 - Math.random());
+    setSongs(shuffledSongs);
+    setupRound(shuffledSongs[0]);
   };
 
-  const accuracy = rounds.length > 0 ? Math.round((score / rounds.length) * 100) : 0;
+  // Loading state
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-gradient-to-b from-[#1e1e1e] to-[#121212] flex items-center justify-center">
+        <motion.div 
+          animate={{ rotate: 360 }}
+          transition={{ duration: 1.5, repeat: Infinity, ease: "linear" }}
+          className="rounded-full h-16 w-16 border-t-2 border-b-2 border-[#1DB954]"
+        />
+      </div>
+    );
+  }
+
+  // Game over screen
+  if (gameOver) {
+    return (
+      <div className="min-h-screen bg-gradient-to-b from-[#1e1e1e] to-[#121212]">
+        <Navbar />
+        <div className="container mx-auto px-4 py-12">
+          <motion.div 
+            initial={{ opacity: 0, y: -20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.6 }}
+            className="max-w-md mx-auto bg-[#181818] rounded-xl p-8 shadow-2xl"
+          >
+            <h1 className="text-3xl font-bold text-center mb-6 bg-clip-text text-transparent bg-gradient-to-r from-[#1DB954] to-[#4caf50]">
+              Game Over!
+            </h1>
+            
+            <div className="text-center mb-8">
+              <p className="text-xl text-[#B3B3B3] mb-2">Your Score</p>
+              <motion.div 
+                initial={{ scale: 0.8 }}
+                animate={{ scale: 1 }}
+                transition={{ type: "spring", stiffness: 200, damping: 10 }}
+                className="text-5xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-[#1DB954] to-[#4caf50]"
+              >
+                {score} / {songs.length}
+              </motion.div>
+              
+              <p className="mt-4 text-[#B3B3B3]">
+                {score === songs.length 
+                  ? "Perfect score! You're a music genius!" 
+                  : score >= songs.length * 0.7 
+                    ? "Great job! You really know your music!" 
+                    : score >= songs.length * 0.5 
+                      ? "Not bad! Keep listening to improve!" 
+                      : "Keep practicing! You'll get better!"}
+              </p>
+            </div>
+            
+            <div className="flex flex-col sm:flex-row gap-4 justify-center">
+              <motion.button
+                whileHover={{ scale: 1.05 }}
+                whileTap={{ scale: 0.95 }}
+                onClick={handleRestart}
+                className="bg-[#1DB954] text-black font-bold py-3 px-6 rounded-full shadow-lg"
+              >
+                Play Again
+              </motion.button>
+              
+              <motion.button
+                whileHover={{ scale: 1.05 }}
+                whileTap={{ scale: 0.95 }}
+                onClick={() => router.push('/')}
+                className="bg-[#282828] text-white font-bold py-3 px-6 rounded-full shadow-lg"
+              >
+                Back to Home
+              </motion.button>
+            </div>
+          </motion.div>
+        </div>
+      </div>
+    );
+  }
 
   return (
-    <div className="min-h-screen bg-base-100 text-base-content relative">
+    <div className="min-h-screen bg-gradient-to-b from-[#1e1e1e] to-[#121212]">
       <Navbar />
-      <audio ref={audioRef} style={{ display: 'none' }} preload="auto" />
-      {phase === 'final' && (
-        <ReactConfetti
-          width={typeof window !== 'undefined' ? window.innerWidth : 0}
-          height={typeof window !== 'undefined' ? window.innerHeight : 0}
-        />
-      )}
-      <div className="container mx-auto p-6 flex flex-col items-center">
-        <AnimatePresence mode="wait">
-          {phase === 'intro' && (
-            <motion.div
-              key="intro"
-              initial={{ opacity: 0, y: -20 }}
+      {showConfetti && <Confetti recycle={false} numberOfPieces={200} />}
+      
+      <div className="container mx-auto px-4 py-8">
+        <div className="flex justify-between items-center mb-8">
+          <motion.div 
+            initial={{ x: -20, opacity: 0 }}
+            animate={{ x: 0, opacity: 1 }}
+            className="bg-[#282828] px-4 py-2 rounded-full"
+          >
+            <p className="text-[#B3B3B3]">
+              Round <span className="text-white font-bold">{round}</span> of <span className="text-white">{songs.length}</span>
+            </p>
+          </motion.div>
+          
+          <motion.div 
+            initial={{ x: 20, opacity: 0 }}
+            animate={{ x: 0, opacity: 1 }}
+            className="bg-[#282828] px-4 py-2 rounded-full"
+          >
+            <p className="text-[#B3B3B3]">
+              Score: <span className="text-[#1DB954] font-bold">{score}</span>
+            </p>
+          </motion.div>
+        </div>
+        
+        <motion.div 
+          initial={{ y: -10, opacity: 0 }}
+          animate={{ y: 0, opacity: 1 }}
+          transition={{ delay: 0.2 }}
+          className="text-center mb-8"
+        >
+          <h1 className="text-3xl font-bold mb-2">Guess The Song</h1>
+          <p className="text-[#B3B3B3]">Listen to the preview and select the correct song</p>
+        </motion.div>
+        
+        <div className="max-w-md mx-auto mb-10">
+          <motion.div 
+            initial={{ scale: 0.95, opacity: 0 }}
+            animate={{ scale: 1, opacity: 1 }}
+            transition={{ delay: 0.3 }}
+            className="bg-gradient-to-br from-[#282828] to-[#181818] rounded-xl overflow-hidden shadow-xl"
+          >
+            <div className="p-6 flex flex-col items-center">
+              <motion.div 
+                animate={{ rotate: isPlaying ? 360 : 0 }}
+                transition={{ duration: 8, repeat: Infinity, ease: "linear" }}
+                className="w-48 h-48 rounded-full overflow-hidden mb-6 shadow-lg relative"
+              >
+                {/* Generic vinyl record background instead of the actual album art */}
+                <div className="absolute inset-0 bg-gradient-to-r from-[#111] to-[#333] rounded-full">
+                  <div className="absolute inset-0 flex items-center justify-center">
+                    <div className="w-12 h-12 rounded-full bg-[#1e1e1e] flex items-center justify-center">
+                      <div className="w-4 h-4 rounded-full bg-[#1DB954]"></div>
+                    </div>
+                    <div className="absolute inset-0 border-4 border-[#444] rounded-full opacity-20"></div>
+                    <div className="absolute inset-[20%] border-2 border-[#444] rounded-full opacity-20"></div>
+                    <div className="absolute inset-[40%] border-2 border-[#444] rounded-full opacity-20"></div>
+                  </div>
+                </div>
+                
+                <div className="w-full h-full bg-black bg-opacity-40 flex items-center justify-center">
+                  <motion.button
+                    whileHover={{ scale: 1.1 }}
+                    whileTap={{ scale: 0.9 }}
+                    onClick={togglePlay}
+                    className="bg-[#1DB954] text-black p-4 rounded-full shadow-lg z-10"
+                  >
+                    {isPlaying ? (
+                      <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8" viewBox="0 0 20 20" fill="currentColor">
+                        <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM7 9a1 1 0 012 0v2a1 1 0 11-2 0V9zm5-1a1 1 0 00-1 1v2a1 1 0 102 0V9a1 1 0 00-1-1z" clipRule="evenodd" />
+                      </svg>
+                    ) : (
+                      <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8" viewBox="0 0 20 20" fill="currentColor">
+                        <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM9.555 7.168A1 1 0 008 8v4a1 1 0 001.555.832l3-2a1 1 0 000-1.664l-3-2z" clipRule="evenodd" />
+                      </svg>
+                    )}
+                  </motion.button>
+                </div>
+              </motion.div>
+              
+              {isPlaying && (
+                <div className="mb-4">
+                  <MusicWaveIndicator />
+                </div>
+              )}
+              
+              <div className="w-full">
+                <div className="relative h-2 w-full bg-[#535353] rounded-full overflow-hidden mb-2">
+                  <motion.div 
+                    className="absolute top-0 left-0 h-full bg-[#1DB954] rounded-full"
+                    style={{ width: `${progress}%` }}
+                    initial={{ width: "0%" }}
+                    animate={{ width: `${progress}%` }}
+                    transition={{ duration: 0.1 }}
+                  ></motion.div>
+                </div>
+                
+                <div className="flex justify-between text-xs text-[#B3B3B3]">
+                  <span>{formatTime(currentTime)}</span>
+                  <span>{formatTime(duration)}</span>
+                </div>
+              </div>
+            </div>
+          </motion.div>
+        </div>
+        
+        <div className="max-w-md mx-auto">
+          <h2 className="text-xl font-bold mb-4 text-center">Which song is playing?</h2>
+          
+          <div className="grid gap-3">
+            <AnimatePresence mode="wait">
+              {options.map((option, index) => (
+                <motion.button
+                  key={option.id}
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -20 }}
+                  transition={{ delay: index * 0.1, duration: 0.3 }}
+                  onClick={() => handleOptionSelect(option)}
+                  disabled={selectedOption !== null}
+                  className={`p-4 rounded-lg text-left transition-all ${
+                    selectedOption === option.id
+                      ? isCorrect
+                        ? 'bg-[#1DB954] text-black'
+                        : 'bg-[#ff5252] text-white'
+                      : selectedOption !== null && option.id === currentSong.id
+                        ? 'bg-[#1DB954] text-black'
+                        : 'bg-[#282828] hover:bg-[#333] text-white'
+                  }`}
+                  whileHover={selectedOption === null ? { scale: 1.02, x: 5 } : {}}
+                  whileTap={selectedOption === null ? { scale: 0.98 } : {}}
+                >
+                  <div className="flex items-center">
+                    <div className="w-10 h-10 rounded overflow-hidden mr-3 flex-shrink-0">
+                      <img 
+                        src={option.image_url} 
+                        alt={option.name}
+                        className="w-full h-full object-cover"
+                      />
+                    </div>
+                    <div className="overflow-hidden">
+                      <p className="font-medium truncate">{option.name}</p>
+                      <p className="text-sm text-[#B3B3B3] truncate">{option.artists}</p>
+                    </div>
+                    {selectedOption === option.id && (
+                      <div className="ml-auto">
+                        {isCorrect ? (
+                          <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                          </svg>
+                        ) : (
+                          <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                          </svg>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                </motion.button>
+              ))}
+            </AnimatePresence>
+          </div>
+          
+          {selectedOption && (
+            <motion.div 
+              initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -20 }}
-              transition={{ duration: 0.6 }}
-              className="card w-full max-w-md bg-base-200 shadow-xl p-6 text-center mb-6"
+              className="mt-6 text-center"
             >
-              <h1 className="text-4xl font-bold mb-4">Guess the Song!</h1>
-              <p className="mb-6">
-                You'll hear a short preview of a song—but you won't see its name
-                until you guess. Choose the correct option from the four choices.
-                Your score updates live.
+              <p className={`text-xl font-bold ${isCorrect ? 'text-[#1DB954]' : 'text-[#ff5252]'}`}>
+                {isCorrect ? 'Correct! 🎉' : 'Wrong! 😕'}
               </p>
-              <button
-                className="btn btn-primary"
-                onClick={() => setPhase('question')}
-              >
-                Start Game
-              </button>
-            </motion.div>
-          )}
-
-          {phase === 'question' && rounds.length > 0 && (
-            <motion.div
-              key="question"
-              initial={{ opacity: 0, scale: 0.9 }}
-              animate={{ opacity: 1, scale: 1 }}
-              exit={{ opacity: 0, scale: 0.9 }}
-              transition={{ duration: 0.5 }}
-              className="w-full flex flex-col items-center mb-6"
-            >
-              {/* Turntable with slower spin */}
-              <Turntable />
-              <p className="mb-4 text-xl">Listen carefully to the preview...</p>
-              <div className="grid grid-cols-2 gap-4 w-full">
-                {rounds[currentRoundIndex].options.map((option) => (
-                  <OptionCard
-                    key={option.id}
-                    option={option}
-                    onSelect={handleOptionSelect}
-                    selected={selectedOption === option.id}
-                    correct={
-                      option.id === rounds[currentRoundIndex].correctSong.id
-                    }
-                  />
-                ))}
-              </div>
-              <p className="mt-4 text-lg font-semibold">
-                Score: {score} / {rounds.length}
+              <p className="text-[#B3B3B3] mt-2">
+                {isCorrect 
+                  ? 'Great job! You know your music.' 
+                  : `The correct answer was "${currentSong.name}" by ${currentSong.artists}`}
               </p>
             </motion.div>
           )}
-
-          {phase === 'final' && (
-            <motion.div
-              key="final"
-              initial={{ opacity: 0, scale: 0.8, y: 20 }}
-              animate={{ opacity: 1, scale: 1, y: 0 }}
-              exit={{ opacity: 0, scale: 0.8, y: 20 }}
-              transition={{ duration: 0.6 }}
-              className="card w-full max-w-md bg-base-200 shadow-xl p-6 text-center receipt"
-            >
-              <h2 className="text-3xl font-bold mb-4">Game Over</h2>
-              <p className="mb-2 text-xl">
-                Final Score: {score} / {rounds.length}
-              </p>
-              <p className="mb-4 text-lg">Accuracy: {accuracy}%</p>
-              <div className="mb-4 text-left">
-                <h3 className="font-semibold mb-2">Round Details:</h3>
-                <ul className="text-sm space-y-1">
-                  {roundResults.map((result, index) => (
-                    <li key={index} className="border-b border-base-content/50 pb-1">
-                      <span className="font-semibold">Round {index + 1}:</span>{' '}
-                      {result.correct ? 'Correct' : 'Wrong'} - Correct: {result.correctSong.name} ({result.correctSong.artists})
-                    </li>
-                  ))}
-                </ul>
-              </div>
-              <button className="btn btn-primary mb-2" onClick={resetGame}>
-                Play Again
-              </button>
-              <button
-                className="btn btn-secondary mb-2 ml-2"
-                onClick={() => alert('Share feature coming soon!')}
-              >
-                Share Score
-              </button>
-              <Link href="/">
-                <button className="btn btn-outline">Back to Home</button>
-              </Link>
-            </motion.div>
-          )}
-        </AnimatePresence>
+        </div>
       </div>
-      <style jsx global>{`
-        /* Turntable styles with slower rotation */
-        .spinny {
-          cursor: pointer;
-          position: relative;
-          font-size: 20em;
-          width: 1em;
-          height: 1em;
-          animation: spin linear 3s infinite;
-          overflow: hidden;
-        }
-        .spinny__inner {
-          position: absolute;
-          top: 0;
-          bottom: 0;
-          left: 0;
-          right: 0;
-          background: url(https://i.imgur.com/cxz5loh.png) no-repeat center;
-          background-size: cover;
-          animation: spin linear 1.5s infinite;
-          animation-direction: reverse;
-          animation-play-state: paused;
-        }
-        .spinny:hover .spinny__inner {
-          animation-play-state: running;
-        }
-        @keyframes spin {
-          from {
-            transform: rotate(0deg);
-          }
-          to {
-            transform: rotate(360deg);
-          }
-        }
-        /* Receipt style for final results using theme variables */
-        .receipt {
-          background: var(--base-100);
-          border: 1px dashed var(--border-color, currentColor);
-          padding: 1.5rem;
-          border-radius: 0.5rem;
-        }
-      `}</style>
+      
+      <audio
+        ref={audioRef}
+        src={currentSong?.preview_url}
+        preload="auto"
+        style={{ display: 'none' }}
+      />
     </div>
   );
 }
