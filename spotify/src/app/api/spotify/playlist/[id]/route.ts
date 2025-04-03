@@ -64,7 +64,7 @@ export async function GET(request: NextRequest, context: RouteContext) {
     const offset = parseInt(searchParams.get('offset') || '0', 10);
     const useClientCredentials = searchParams.get('use_client_credentials') === 'true';
     console.log(`[API Playlist] Params: limit=${limit}, offset=${offset}, useClientCredentials=${useClientCredentials}`);
-
+    
     let accessToken = '';
     let tokenType = 'unknown';
 
@@ -133,11 +133,11 @@ export async function GET(request: NextRequest, context: RouteContext) {
         console.error('[API Playlist] No valid access token could be obtained.');
         return NextResponse.json({ error: 'Failed to obtain access token' }, { status: 500, headers: corsHeaders });
     }
-
+    
     const fields = 'id,name,description,images,owner(display_name,id),tracks(items(track(id,name,artists(id,name),album(id,name,images,release_date),duration_ms,preview_url,popularity,explicit)),limit,offset,total)';
     const spotifyUrl = `https://api.spotify.com/v1/playlists/${id}?limit=${limit}&offset=${offset}&fields=${fields}`;
     console.log(`[API Playlist] Making request to: ${spotifyUrl} using ${tokenType} token.`);
-
+      
     const response = await fetch(spotifyUrl, {
         headers: {
         Authorization: `Bearer ${accessToken}`,
@@ -158,7 +158,7 @@ export async function GET(request: NextRequest, context: RouteContext) {
       
       const data = await response.json();
     console.log(`[API Playlist] Successfully fetched playlist ${id} with ${data.tracks?.items?.length || 0} tracks`);
-
+      
     // Basic transformation/validation 
     const transformedData = {
         ...data,
@@ -166,7 +166,7 @@ export async function GET(request: NextRequest, context: RouteContext) {
             ...data.tracks,
             // Filter out items where track is null (can happen with local files)
             items: (data.tracks?.items || []).filter((item: any) => item && item.track)
-        }
+        } 
     };
 
     // Add CORS headers to successful response

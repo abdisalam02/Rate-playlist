@@ -4,11 +4,11 @@ import { authOptions } from '@/lib/auth';
 
 export async function GET(
   request: NextRequest,
-  context: { params: { id?: string } }
+  { params }: { params: { id?: string } }
 ) {
   try {
     const session = await getServerSession(authOptions);
-    const albumId = context.params?.id;
+    const albumId = params?.id;
     
     if (!albumId) {
       return NextResponse.json({ error: 'Album ID is required' }, { status: 400 });
