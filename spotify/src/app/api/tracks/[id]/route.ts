@@ -4,11 +4,11 @@ import { authOptions } from '@/lib/auth';
 
 export async function GET(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  context
 ) {
   try {
     const session = await getServerSession(authOptions);
-    const trackId = params.id;
+    const trackId = context.params.id;
     
     if (!trackId) {
       console.error("[API Track] Track ID missing unexpectedly despite route match.");

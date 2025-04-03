@@ -75,11 +75,10 @@ const getClientCredentialsToken = async (): Promise<string | null> => {
 
 export async function GET(
   request: NextRequest, 
-  // Use destructured params signature with id as required string
-  { params }: { params: { id: string } }
+  context
 ) {
-  // Access id directly from the destructured params
-  const playlistId = params.id; // id is now guaranteed by type
+  // Access id directly from context.params
+  const playlistId = context.params.id;
 
   if (!playlistId) {
     // This check might be redundant now due to type, but safe to keep
