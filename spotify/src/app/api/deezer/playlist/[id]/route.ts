@@ -52,12 +52,9 @@ interface DeezerPlaylistTracksResponse {
   total: number;
 }
 
-// Define the expected shape of the context containing params
-interface RouteContext {
-  params: {
-    id?: string; // Deezer Playlist ID
-  };
-}
+// Define types for Spotify Search
+interface SpotifySearchResultItem { id: string; preview_url?: string | null; duration_ms?: number; }
+interface SpotifyIdMappingResult { deezerId: string; spotifyData: { spotifyId: string; preview_url?: string | null; duration_ms?: number; }; }
 
 // --- Helper Function for Spotify Client Credentials (Duplicate - refactor later) ---
 const getClientCredentialsToken = async (): Promise<string | null> => { 
@@ -76,13 +73,13 @@ const getClientCredentialsToken = async (): Promise<string | null> => {
   } catch (error) { console.error("[API Deezer Playlist] Error fetching Spotify token:", error); return null; }
 };
 
-// Define types for Spotify Search
-interface SpotifySearchResultItem { id: string; preview_url?: string | null; duration_ms?: number; }
-interface SpotifyIdMappingResult { deezerId: string; spotifyData: { spotifyId: string; preview_url?: string | null; duration_ms?: number; }; }
-
-export async function GET(request: NextRequest, context: RouteContext) {
-  const { params } = context;
-  const playlistId = params?.id;
+export async function GET(
+  request: NextRequest, 
+  // Define context type inline
+  context: { params: { id?: string } }
+) {
+  // Destructure id directly from context.params
+  const playlistId = context.params?.id;
 
   if (!playlistId) {
     console.error('[API Deezer Playlist] Missing Playlist ID in route parameters.');
