@@ -6,6 +6,7 @@ import { useSession } from "next-auth/react";
 import Navbar from '@/app/components/Navbar';
 import Link from 'next/link';
 import { motion, AnimatePresence } from 'framer-motion';
+import Image from 'next/image';
 
 // Star rating component
 interface StarRatingProps {
@@ -133,9 +134,11 @@ function UserRatingItem({ rating }: UserRatingItemProps) {
       <div className="p-4">
         <div className="flex items-start gap-3">
           <Link href={`/user/${rating.userId}`}>
-            <img 
+            <Image 
               src={rating.userImage || "/default-avatar.png"} 
-              alt={rating.userName} 
+              alt={rating.userName || 'User Avatar'} 
+              width={40}
+              height={40}
               className="w-10 h-10 rounded-full object-cover border-2 border-[#1DB954]"
             />
           </Link>
