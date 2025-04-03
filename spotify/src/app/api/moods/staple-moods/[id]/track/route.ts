@@ -76,7 +76,7 @@ export async function POST(
       const devUserId = '00000000-0000-4000-a000-000000000001';
       userId = devUserId;
       console.log('Using development placeholder user ID:', userId);
-      
+        
       // Try to create the dev user in the database if it doesn't exist
       try {
         // Check if user exists first
@@ -106,7 +106,7 @@ export async function POST(
         } else {
           console.log('Development user already exists in database');
         }
-      } catch (error) {
+        } catch (error) {
         console.warn('Error checking/creating development user:', error);
       }
     }
@@ -151,9 +151,9 @@ export async function POST(
     try {
     // Add track to staple mood
       const result = await addTrackToStapleMood(userId, moodId, trackData);
-      console.log('Track added to staple mood:', result);
-      
-      return createApiResponse(true, result, 'Track added successfully');
+    console.log('Track added to staple mood:', result);
+    
+    return createApiResponse(true, result, 'Track added successfully');
     } catch (error) {
       console.error('Error adding track to staple mood (in try block):', error);
       

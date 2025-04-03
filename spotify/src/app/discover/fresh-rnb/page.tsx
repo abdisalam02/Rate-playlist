@@ -100,12 +100,12 @@ function TrackListItem({ track, index, onPlay }: { track: Track; index: number; 
   );
 }
 
-export default function HomeFeaturedTracksPage() {
+export default function FreshRnbPage() {
   const [tracks, setTracks] = useState<Track[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const { playTrack } = useAudio();
-  const PLAYLIST_ID = '2228601362'; // Fresh Pop Playlist ID (same as featured mix)
+  const PLAYLIST_ID = '2021225582'; // Fresh RnB Playlist ID
 
   useEffect(() => {
     const fetchTracks = async () => {
@@ -115,24 +115,24 @@ export default function HomeFeaturedTracksPage() {
         // Fetch from the Deezer playlist endpoint
         const response = await fetch(`/api/deezer/playlist/${PLAYLIST_ID}?limit=50`); // Fetch more for the full page
         if (!response.ok) {
-          throw new Error(`Failed to fetch Featured playlist: ${response.statusText}`);
+          throw new Error(`Failed to fetch Fresh RnB playlist: ${response.statusText}`);
         }
         const data = await response.json();
         
         // Check the data structure (assuming tracks are in data.tracks or data directly)
         const trackData = data?.tracks || data || [];
-        if (Array.isArray(trackData)) {
+         if (Array.isArray(trackData)) {
              setTracks(trackData.map((t: any) => ({ // Basic transformation, enhance as needed
                ...t,
                duration_ms: t.duration * 1000 || 0
             })));
         } else {
             console.error("Invalid track data format:", data);
-             throw new Error('Invalid data format received for Featured tracks');
+             throw new Error('Invalid data format received for Fresh RnB tracks');
         }
 
       } catch (err: any) {
-        console.error('Error fetching Featured tracks:', err);
+        console.error('Error fetching Fresh RnB tracks:', err);
         setError(err.message || 'Failed to load tracks');
       } finally {
         setLoading(false);
@@ -155,7 +155,6 @@ export default function HomeFeaturedTracksPage() {
     <div className="min-h-screen bg-gradient-to-b from-[#1f1f1f] to-[#121212] text-white">
       <TokenRefresher />
       <Navbar />
-      
       <main className="pt-20 pb-20 px-6 max-w-7xl mx-auto">
         <div className="flex items-center mb-8">
           <Link 
@@ -166,7 +165,7 @@ export default function HomeFeaturedTracksPage() {
               <path fillRule="evenodd" d="M12.707 5.293a1 1 0 010 1.414L9.414 10l3.293 3.293a1 1 0 01-1.414 1.414l-4-4a1 1 0 010-1.414l4-4a1 1 0 011.414 0z" clipRule="evenodd" />
             </svg>
           </Link>
-          <h1 className="text-3xl font-bold">Featured Mix (Fresh Pop)</h1>
+          <h1 className="text-3xl font-bold">Fresh RnB</h1>
         </div>
 
         {loading && (

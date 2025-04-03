@@ -33,4 +33,5 @@ State Management: Use React Query for server state, React Context for theme/user
 -Always fix linter errors 
 -Always use commands with the proper PowerShell syntax
 - Stop running developer mode after making chnages this opens up many unessesary ports
+- always cheack if a certain file or componenet exists before haluciniating or guessing that it exists 
 

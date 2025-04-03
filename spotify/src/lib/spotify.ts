@@ -1,4 +1,5 @@
 import { Session } from "next-auth";
+import { Buffer } from 'buffer'; // Need Buffer for base64 encoding
 
 const BASE_URL = 'https://api.spotify.com/v1';
 
@@ -120,4 +121,69 @@ export async function searchTracks(token: string, query: string, limit: number =
   }
 
   return response.json();
+}
+
+// --- NEW Client Credentials Token Function ---
+const SPOTIFY_CLIENT_ID = process.env.SPOTIFY_CLIENT_ID;
+const SPOTIFY_CLIENT_SECRET = process.env.SPOTIFY_CLIENT_SECRET;
+
+// Basic in-memory cache for the token (replace with a more robust cache if needed)
+let clientCredentialsToken: { token: string; expiresAt: number } | null = null;
+
+export async function getClientCredentialsToken(): Promise<string | null> {
+  // Check cache first
+  if (clientCredentialsToken && clientCredentialsToken.expiresAt > Date.now()) {
+    console.log('[Spotify Auth] Using cached client credentials token.');
+    return clientCredentialsToken.token;
+  }
+
+  console.log('[Spotify Auth] Fetching new client credentials token...');
+  if (!SPOTIFY_CLIENT_ID || !SPOTIFY_CLIENT_SECRET) {
+    console.error('[Spotify Auth] Missing SPOTIFY_CLIENT_ID or SPOTIFY_CLIENT_SECRET environment variables.');
+    return null;
+  }
+
+  const authHeader = 'Basic ' + Buffer.from(SPOTIFY_CLIENT_ID + ':' + SPOTIFY_CLIENT_SECRET).toString('base64');
+
+  try {
+    const response = await fetch('https://accounts.spotify.com/api/token', {
+      method: 'POST',
+      headers: {
+        'Authorization': authHeader,
+        'Content-Type': 'application/x-www-form-urlencoded'
+      },
+      body: 'grant_type=client_credentials',
+      cache: 'no-store' // Don't cache this request
+    });
+
+    if (!response.ok) {
+      console.error(`[Spotify Auth] Error fetching client credentials token: ${response.status} ${await response.text()}`);
+      clientCredentialsToken = null; // Clear cache on error
+      return null;
+    }
+
+    const data = await response.json();
+    const newToken = data.access_token;
+    const expiresIn = data.expires_in; // Seconds
+
+    if (!newToken || !expiresIn) {
+        console.error('[Spotify Auth] Invalid token data received:', data);
+        clientCredentialsToken = null;
+        return null;
+    }
+
+    // Cache the new token (expires 5 minutes before actual expiration)
+    clientCredentialsToken = {
+      token: newToken,
+      expiresAt: Date.now() + (expiresIn - 300) * 1000 
+    };
+
+    console.log('[Spotify Auth] Successfully obtained and cached new client credentials token.');
+    return clientCredentialsToken.token;
+
+  } catch (error) {
+    console.error('[Spotify Auth] Exception during client credentials fetch:', error);
+    clientCredentialsToken = null; // Clear cache on exception
+    return null;
+  }
 } 

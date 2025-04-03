@@ -7,6 +7,7 @@ import Image from 'next/image';
 import Navbar from '@/app/components/Navbar';
 import { motion } from 'framer-motion';
 import TokenRefresher from '@/app/components/TokenRefresher';
+import { useAudio } from '@/app/providers';
 
 // Types
 interface Artist {
@@ -28,6 +29,7 @@ interface Track {
   duration_ms: number;
   source_playlist?: { id: string; name: string };
   playlist_name?: string;
+  preview_url?: string;
 }
 
 const formatDuration = (ms: number): string => {
@@ -96,61 +98,70 @@ export default function CurrentHitsPage() {
   const [tracks, setTracks] = useState<Track[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [pageSize, setPageSize] = useState(20);
-  const [source, setSource] = useState<string>('Loading...');
-  const [totalCount, setTotalCount] = useState<number>(0);
-  
+  const { playTrack } = useAudio();
+
   useEffect(() => {
     const fetchTracks = async () => {
+      setLoading(true);
+      setError(null);
       try {
-        setLoading(true);
-        
-        const url = `/api/discover/current-hits?limit=${pageSize}&use_client_credentials=true`;
-        console.log("Fetching tracks from:", url);
-        
-        const response = await fetch(url, { cache: 'no-store' });
-        if (!response.ok) throw new Error(`API error: ${response.status}`);
-        
+        // Fetch from the Deezer chart endpoint
+        const response = await fetch(`/api/deezer/chart/tracks?limit=50`); // Fetch more for the full page
+        if (!response.ok) {
+          throw new Error(`Failed to fetch current hits: ${response.statusText}`);
+        }
         const data = await response.json();
         
-        if (data.tracks && Array.isArray(data.tracks)) {
-          setTracks(data.tracks);
-          setTotalCount(data.total || data.tracks.length);
-          setSource(data.source || 'Unknown source');
-          console.log(`Loaded ${data.tracks.length} tracks successfully`);
+        // Check the data structure (assuming tracks are in data.tracks or data directly)
+        const trackData = data?.tracks || data || [];
+         if (Array.isArray(trackData)) {
+             setTracks(trackData.map((t: any) => ({ // Basic transformation, enhance as needed
+               ...t,
+               duration_ms: t.duration * 1000 || 0
+            })));
         } else {
-          throw new Error('Invalid data format received');
+            console.error("Invalid track data format:", data);
+             throw new Error('Invalid data format received for current hits');
         }
-      } catch (err) {
-        console.error('Error fetching tracks:', err);
-        setError(`Failed to load tracks: ${err instanceof Error ? err.message : 'Unknown error'}`);
+
+      } catch (err: any) {
+        console.error('Error fetching current hits:', err);
+        setError(err.message || 'Failed to load tracks');
       } finally {
         setLoading(false);
       }
     };
-    
+
     fetchTracks();
-  }, [session, pageSize]);
-  
-  const loadMore = () => {
-    setPageSize(prev => prev + 20);
+  }, []);
+
+  const handlePlayTrack = (track: Track) => {
+    if (track.preview_url) {
+      playTrack({ ...track, preview_url: track.preview_url });
+    } else {
+      console.log("No preview available for this track.");
+    }
   };
-  
+
   return (
-    <div className="min-h-screen bg-gradient-to-b from-[#121212] to-[#181818] text-white">
+    <div className="min-h-screen bg-gradient-to-b from-[#1f1f1f] to-[#121212] text-white">
       <TokenRefresher />
       <Navbar />
       
-      <main className="pt-28 pb-20 px-4 max-w-7xl mx-auto">
-        <div className="mb-8">
-          <h1 className="text-3xl font-bold mb-2">Today's Top Hits</h1>
-          <p className="text-gray-400">
-            The most popular tracks on Spotify right now
-          </p>
-          <p className="text-sm text-green-500 mt-2">Source: {source} • {totalCount} tracks</p>
+      <main className="pt-20 pb-20 px-6 max-w-7xl mx-auto">
+        <div className="flex items-center mb-8">
+          <Link 
+            href="/discover" 
+            className="flex items-center bg-black bg-opacity-40 hover:bg-opacity-60 transition rounded-full p-2 mr-4"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+              <path fillRule="evenodd" d="M12.707 5.293a1 1 0 010 1.414L9.414 10l3.293 3.293a1 1 0 01-1.414 1.414l-4-4a1 1 0 010-1.414l4-4a1 1 0 011.414 0z" clipRule="evenodd" />
+            </svg>
+          </Link>
+          <h1 className="text-3xl font-bold">Today's Top Tracks</h1>
         </div>
-        
-        {loading && tracks.length === 0 ? (
+
+        {loading && (
           <div className="space-y-4">
             {Array.from({ length: 10 }).map((_, i) => (
               <div key={i} className="bg-[#181818] p-4 rounded-lg animate-pulse flex items-center gap-4">
@@ -164,7 +175,8 @@ export default function CurrentHitsPage() {
               </div>
             ))}
           </div>
-        ) : error ? (
+        )}
+        {error && (
           <div className="bg-red-900/30 border border-red-800 p-4 rounded-lg text-center">
             <p className="text-red-400">{error}</p>
             <button 
@@ -174,26 +186,17 @@ export default function CurrentHitsPage() {
               Try Again
             </button>
           </div>
-        ) : (
-          <>
-            <div className="space-y-2 mb-8">
-              {tracks.map((track, index) => (
-                <TrackItem key={`${track.id}-${index}`} track={track} index={index} />
-              ))}
-            </div>
-            
-            {tracks.length < totalCount && (
-              <div className="flex justify-center mt-8">
-                <button
-                  onClick={loadMore}
-                  disabled={loading}
-                  className="px-6 py-3 bg-[#1DB954] hover:bg-[#1ED760] text-black font-medium rounded-full transition-colors disabled:opacity-50"
-                >
-                  {loading ? 'Loading...' : 'Load More Tracks'}
-                </button>
-              </div>
+        )}
+        {!loading && !error && (
+          <div className="space-y-3">
+            {tracks.length > 0 ? (
+              tracks.map((track, index) => (
+                <TrackItem key={track.id || index} track={track} index={index} />
+              ))
+            ) : (
+              <p className="text-center text-gray-400 py-10">No tracks found.</p>
             )}
-          </>
+          </div>
         )}
       </main>
     </div>
