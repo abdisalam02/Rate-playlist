@@ -188,7 +188,7 @@ export default function RatePlaylist() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  
+
   const audioRef = useRef(null);
   const progressInterval = useRef(null);
   const MAX_SONGS = 10; // Limit to 10 songs
@@ -250,7 +250,7 @@ export default function RatePlaylist() {
         }
       }, 100);
     }
-    
+
     return () => {
       if (progressInterval.current) {
         clearInterval(progressInterval.current);
@@ -267,10 +267,10 @@ export default function RatePlaylist() {
 
   // Toggle play/pause
   const togglePlay = () => {
-    if (audioRef.current) {
+      if (audioRef.current) {
       if (isPlaying) {
         audioRef.current.pause();
-      } else {
+    } else {
         audioRef.current.play();
       }
     }
@@ -364,7 +364,7 @@ export default function RatePlaylist() {
         <div className="text-center p-4">
           <p className="text-xl text-[#B3B3B3]">No songs found in this playlist.</p>
           <button
-            onClick={() => router.push('/')}
+                    onClick={() => router.push('/')}
             className="mt-4 bg-[#1DB954] text-black font-bold py-2 px-4 rounded-full hover:bg-opacity-90"
           >
             Go Back Home
@@ -430,9 +430,9 @@ export default function RatePlaylist() {
                 </p>
               </motion.div>
               
-              <AnimatePresence mode="wait">
-                <motion.div
-                  key={currentSong.id}
+        <AnimatePresence mode="wait">
+          <motion.div
+            key={currentSong.id}
                   initial={{ opacity: 0, scale: 0.95 }}
                   animate={{ opacity: 1, scale: 1 }}
                   exit={{ opacity: 0, scale: 0.95 }}
@@ -521,7 +521,7 @@ export default function RatePlaylist() {
                   </motion.div>
                 )}
               </motion.div>
-            </motion.div>
+          </motion.div>
           )}
         </AnimatePresence>
       </div>

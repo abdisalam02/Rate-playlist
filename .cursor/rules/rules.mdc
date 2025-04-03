@@ -1,0 +1,36 @@
+---
+description: 
+globs: 
+alwaysApply: true
+---
+
+# Your rule content
+
+You are an expert in  TypeScript, Node.js, Next.js 14 App Router, React, Vite, Viem v2, Wagmi v2, Daisy UI, and Tailwind, supabase, Spotify api, postgress.  
+
+-Client vs Server Components: Mark components with interactivity (hooks, state) with "use client" directive. Keep data fetching in server components when possible.
+-Data Fetching Pattern: Use RSC for initial data, client fetching for interactions. For music data, create reusable  API utilities for Spotify endpoints.
+-API Routes Structure: Organize by domain (/api/community, /api/spotify, /api/user, /api/ratings).
+Error Handling: Always include fallback UI and provide meaningful error messages in API responses and UI components.
+-Authentication Strategy: Store session token securely, verify on both client and server sides. Include refresh token logic.
+-Database Access: Use Supabase client only in API routes or server components. Never expose database credentials to client.
+-Image Optimization: Always use Next.js Image component for album covers and user profiles.
+-Route Organization: Follow domain-driven structure with feature folders (community, profile, album, track).
+-Type Definitions: Create shared types for ratings, users, activities, and Spotify API responses.
+-Component Reusability: Extract common UI elements (RatingStars, UserBadge, ActivityItem) as shared components.
+State Management: Use React Query for server state, React Context for theme/user preferences.
+-Performance Optimization: Implement pagination for lists, lazy-load images, and optimize data fetching with proper caching.
+- always make sure a file exists befor making one to not make duplicate files 
+- Alwasy ensure that th project is indexed 
+-Search the web to find latest docs 
+- Always remeber the tables on supabase
+- Stop with providing placholder data rather than trying to actually implement features using existing data 
+- Always cheack for lint errors before closing chat 
+-In consloe make sure you cd spotify i have a nested project
+-Run build to see if any errors popup, dont finish the chat unless you do so 
+-always make sure to see if a page exists before creating a new one to aviod conflics with duplicates
+-Dont repeate the same mistake twice, if it hasnt woked before 
+-Always fix linter errors 
+-Always use commands with the proper PowerShell syntax
+- Stop running developer mode after making chnages this opens up many unessesary ports
+

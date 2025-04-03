@@ -45,7 +45,7 @@ const TournamentBracket = ({ initialSongs, roundsHistory = [], currentRound, win
     if (!song || !nextRound) return false;
     return nextRound.some(nextSong => nextSong.id === song.id);
   };
-  
+
   return (
     <div className={`tournament-bracket bracket-${bracketSize}`}>
       <div className="rounds-container">

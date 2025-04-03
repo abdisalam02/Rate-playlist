@@ -1,0 +1,60 @@
+<svg width="800" height="600" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <filter id="glow" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="2" result="blur" />
+      <feComposite in="SourceGraphic" in2="blur" operator="over" />
+    </filter>
+  </defs>
+  <rect width="800" height="600" fill="#000" />
+  
+  <!-- Stars -->
+  <g filter="url(#glow)">
+    <circle cx="100" cy="100" r="2" fill="#fff" />
+    <circle cx="200" cy="50" r="3" fill="#ff00ff" />
+    <circle cx="300" cy="150" r="2" fill="#00f2ff" />
+    <circle cx="400" cy="80" r="1.5" fill="#fff" />
+    <circle cx="500" cy="120" r="2" fill="#ff00ff" />
+    <circle cx="600" cy="70" r="2.5" fill="#00f2ff" />
+    <circle cx="700" cy="110" r="2" fill="#fff" />
+    
+    <circle cx="50" cy="200" r="1.5" fill="#ff00ff" />
+    <circle cx="150" cy="250" r="2" fill="#00f2ff" />
+    <circle cx="250" cy="220" r="2.5" fill="#fff" />
+    <circle cx="350" cy="270" r="2" fill="#ff00ff" />
+    <circle cx="450" cy="230" r="1.5" fill="#00f2ff" />
+    <circle cx="550" cy="280" r="3" fill="#fff" />
+    <circle cx="650" cy="210" r="2" fill="#ff00ff" />
+    <circle cx="750" cy="240" r="2.5" fill="#00f2ff" />
+    
+    <circle cx="120" cy="330" r="2" fill="#fff" />
+    <circle cx="220" cy="370" r="2.5" fill="#ff00ff" />
+    <circle cx="320" cy="310" r="1.5" fill="#00f2ff" />
+    <circle cx="420" cy="350" r="2" fill="#fff" />
+    <circle cx="520" cy="390" r="3" fill="#ff00ff" />
+    <circle cx="620" cy="320" r="2" fill="#00f2ff" />
+    <circle cx="720" cy="360" r="1.5" fill="#fff" />
+    
+    <circle cx="80" cy="420" r="2.5" fill="#ff00ff" />
+    <circle cx="180" cy="450" r="2" fill="#00f2ff" />
+    <circle cx="280" cy="480" r="1.5" fill="#fff" />
+    <circle cx="380" cy="430" r="3" fill="#ff00ff" />
+    <circle cx="480" cy="470" r="2" fill="#00f2ff" />
+    <circle cx="580" cy="410" r="2.5" fill="#fff" />
+    <circle cx="680" cy="440" r="2" fill="#ff00ff" />
+    <circle cx="780" cy="460" r="1.5" fill="#00f2ff" />
+    
+    <circle cx="50" cy="520" r="2" fill="#fff" />
+    <circle cx="150" cy="540" r="3" fill="#ff00ff" />
+    <circle cx="250" cy="560" r="2" fill="#00f2ff" />
+    <circle cx="350" cy="510" r="1.5" fill="#fff" />
+    <circle cx="450" cy="530" r="2" fill="#ff00ff" />
+    <circle cx="550" cy="550" r="2.5" fill="#00f2ff" />
+    <circle cx="650" cy="520" r="2" fill="#fff" />
+    <circle cx="750" cy="570" r="1.5" fill="#ff00ff" />
+  </g>
+  
+  <!-- Y2K-style decorative elements -->
+  <path d="M400,300 L420,320 L400,340 L380,320 Z" fill="#ff00ff" opacity="0.5" />
+  <path d="M200,150 L220,170 L200,190 L180,170 Z" fill="#00f2ff" opacity="0.5" />
+  <path d="M600,400 L620,420 L600,440 L580,420 Z" fill="#ff00ff" opacity="0.5" />
+</svg> 

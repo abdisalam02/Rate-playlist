@@ -475,8 +475,8 @@ export default function VersusTournament() {
               transition={{ delay: 0.3 }}
             >
               <img
-                src={winner.image_url}
-                alt={winner.name}
+              src={winner.image_url}
+              alt={winner.name}
                 className="w-full h-full object-cover"
               />
               {playingSong === winner.id && (
@@ -495,14 +495,14 @@ export default function VersusTournament() {
               {winner.name}
             </motion.h3>
             
-            <motion.p
+              <motion.p
               className="text-[#B3B3B3] mb-6"
-              initial={{ y: 20, opacity: 0 }}
-              animate={{ y: 0, opacity: 1 }}
+                initial={{ y: 20, opacity: 0 }}
+                animate={{ y: 0, opacity: 1 }}
               transition={{ delay: 0.5 }}
-            >
+              >
               {winner.artists}
-            </motion.p>
+              </motion.p>
             
             <motion.div
               className="flex justify-center space-x-4"

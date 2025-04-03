@@ -1,0 +1,38 @@
+{
+  "name": "Spotify Rating App",
+  "short_name": "SpotifyRating",
+  "description": "Rate and discover music on Spotify",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#000000",
+  "theme_color": "#1DB954",
+  "icons": [
+    {
+      "src": "icons/128x128.png",
+      "sizes": "128x128",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "icons/512x512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ],
+  "screenshots": [
+    {
+      "src": "/icons/Screenshot-mobile.png",
+      "sizes": "553x970",
+      "type": "image/png",
+      "label": "Main view on mobile"
+    },
+    {
+      "src": "/icons/Screenshot-Desktop.png",
+      "sizes": "1846x1177",
+      "type": "image/png",
+      "form_factor": "wide",
+      "label": "Main view on desktop"
+    }
+  ]
+} 
