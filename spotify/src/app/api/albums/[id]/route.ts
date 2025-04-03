@@ -4,13 +4,14 @@ import { authOptions } from '@/lib/auth';
 
 export async function GET(
   request: NextRequest,
-  { params }: { params: { id?: string } }
+  { params }: { params: { id: string } }
 ) {
   try {
     const session = await getServerSession(authOptions);
-    const albumId = params?.id;
+    const albumId = params.id;
     
     if (!albumId) {
+      console.error("[API Album] Album ID missing unexpectedly despite route match.");
       return NextResponse.json({ error: 'Album ID is required' }, { status: 400 });
     }
     

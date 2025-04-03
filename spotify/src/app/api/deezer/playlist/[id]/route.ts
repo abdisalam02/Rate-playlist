@@ -75,14 +75,15 @@ const getClientCredentialsToken = async (): Promise<string | null> => {
 
 export async function GET(
   request: NextRequest, 
-  // Define context type inline
-  context: { params: { id?: string } }
+  // Use destructured params signature with id as required string
+  { params }: { params: { id: string } }
 ) {
-  // Destructure id directly from context.params
-  const playlistId = context.params?.id;
+  // Access id directly from the destructured params
+  const playlistId = params.id; // id is now guaranteed by type
 
   if (!playlistId) {
-    console.error('[API Deezer Playlist] Missing Playlist ID in route parameters.');
+    // This check might be redundant now due to type, but safe to keep
+    console.error("[API Deezer Playlist] Playlist ID missing unexpectedly despite route match.");
     return NextResponse.json({ error: 'Playlist ID is required' }, { status: 400 });
   }
 
