@@ -7,10 +7,12 @@ import { authOptions } from '@/lib/auth'; // Keep for Spotify token
 
 export async function GET(
   request: NextRequest,
-  { params }: { params: { userId: string } }
+  { params }: { params: { userId?: string } }
 ) {
-  // Get userId from params (remove incorrect await)
-  const userId = params.userId;
+  // Await params before accessing
+  const awaitedParams = await params;
+  const userId = awaitedParams?.userId;
+  
   if (!userId) {
     return NextResponse.json({ error: 'User ID is required' }, { status: 400 });
   }
@@ -47,7 +49,7 @@ export async function GET(
         item_id,
         item_type,
         created_at,
-        updated_at, 
+        updated_at,
         review
       `)
       .eq('user_id', userId)
@@ -87,7 +89,7 @@ export async function GET(
     console.log('[Ratings Route] Attempting to get NextAuth session for Spotify token...');
     // const { data: { session }, error: sessionError } = await supabase.auth.getSession(); // REMOVED - Doesn't work with global client
     const session = await getServerSession(authOptions);
-    
+
     // Log session status
     if (session) {
       console.log(`[Ratings Route] NextAuth session retrieved. User authenticated: ${!!session?.user}`);
@@ -111,14 +113,14 @@ export async function GET(
         if (tracksResponse.ok) {
           const d = await tracksResponse.json();
           d?.tracks?.forEach((track: any) => {
-            if (track && track.id) {
-              itemDetails[track.id] = {
-                name: track.name,
-                artists: track.artists?.map((a: any) => a.name).join(', '),
-                image: track.album?.images?.[0]?.url || '/placeholder-track.png'
-              };
-            }
-          });
+              if (track && track.id) {
+                itemDetails[track.id] = {
+                  name: track.name,
+                  artists: track.artists?.map((a: any) => a.name).join(', '),
+                  image: track.album?.images?.[0]?.url || '/placeholder-track.png'
+                };
+              }
+            });
         } else {
           console.warn(`Spotify track fetch failed: ${tracksResponse.status}`);
         }
@@ -134,14 +136,14 @@ export async function GET(
         if (albumsResponse.ok) {
           const d = await albumsResponse.json();
           d?.albums?.forEach((album: any) => {
-            if (album && album.id) {
-              itemDetails[album.id] = {
-                name: album.name,
-                artists: album.artists?.map((a: any) => a.name).join(', '),
-                image: album.images?.[0]?.url || '/placeholder-album.png'
-              };
-            }
-          });
+              if (album && album.id) {
+                itemDetails[album.id] = {
+                  name: album.name,
+                  artists: album.artists?.map((a: any) => a.name).join(', '),
+                  image: album.images?.[0]?.url || '/placeholder-album.png'
+                };
+              }
+            });
         } else {
           console.warn(`Spotify album fetch failed: ${albumsResponse.status}`);
         }

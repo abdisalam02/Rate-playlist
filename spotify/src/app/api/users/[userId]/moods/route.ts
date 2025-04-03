@@ -14,20 +14,14 @@ export const revalidate = 0;
  */
 export async function GET(
   request: NextRequest,
-  { params }: { params: { userId: string } }
+  { params }: { params: { userId?: string } }
 ) {
   try {
-    // Get the user ID from the route parameters (use let instead of const)
-    let userId = params.userId;
+    // Get userId safely from destructured params
+    let userId = params?.userId;
     
     // First, check if the user exists
-    const { data: userData, error: userError } = await supabase
-      .from('users')
-      .select('id')
-      .eq('id', userId)
-      .single();
-      
-    if (userError) {
+    if (!userId) {
       // Fallback to looking up by Spotify ID
       console.log(`User ID ${userId} not found by direct ID lookup, trying spotify_id...`);
       const { data: spotifyUser, error: spotifyUserError } = await supabase
@@ -37,7 +31,7 @@ export async function GET(
         .single();
       
       if (spotifyUserError || !spotifyUser) {
-        console.error('User not found by ID or spotify_id:', userError, spotifyUserError);
+        console.error('User not found by ID or spotify_id:', spotifyUserError);
         return NextResponse.json({ error: 'User not found' }, { status: 404 });
       }
       

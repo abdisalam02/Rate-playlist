@@ -456,6 +456,9 @@ function UserMoodCard({
   onDelete: (mood: UserMood) => Promise<void>; 
   onAddTrack: (mood: UserMood) => void; 
 }) {
+  // ADDED FOR DEBUGGING
+  console.log(`UserMoodCard Render: Mood=${mood.mood_name}, Tracks Received=${tracks?.length ?? 0}`);
+  
   const [isExpanded, setIsExpanded] = useState(false);
   const hasTracks = tracks && tracks.length > 0;
   
@@ -716,15 +719,10 @@ export default function MoodManager() {
           console.error("MoodManager: Failed to fetch user staple mood tracks:", stapleMoodTracksData);
           console.warn("MoodManager: Continuing without user staple mood tracks");
         } else {
-          // Check if response is an array directly or has a data property
-          const tracksData = Array.isArray(stapleMoodTracksData) ? stapleMoodTracksData : stapleMoodTracksData.data || [];
-          setStapleMoodTracks(tracksData);
+          const tracks = stapleMoodTracksData?.tracks || [];
+          setStapleMoodTracks(tracks);
           stapleMoodTracksLoaded = true;
-          console.log(`MoodManager: Loaded ${tracksData.length} user staple mood tracks`);
-          
-          if (tracksData.length === 0) {
-            console.warn("MoodManager: No user staple mood tracks returned");
-          }
+          console.log(`MoodManager: Set user staple mood tracks state with ${tracks.length} tracks.`);
         }
       } else {
         console.warn("MoodManager: No user ID available to fetch staple mood tracks");
@@ -840,7 +838,10 @@ export default function MoodManager() {
         const url = `/api/moods/staple-moods/${selectedMood.id}/track`;
         console.log('Adding track to staple mood URL:', url);
         
-        const response = await fetch(url, {
+        // Use replace=true query parameter to replace any existing track
+        const urlWithReplace = `${url}?replace=true`;
+        
+        const response = await fetch(urlWithReplace, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(trackData)

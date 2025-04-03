@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useMemo, lazy, Suspense } from 'react';
 import { useSession } from "next-auth/react";
 import { useRouter, useSearchParams, usePathname } from 'next/navigation';
 import Navbar from '@/app/components/Navbar';
@@ -13,6 +13,7 @@ import { Album, Artist, UserProfile, Playlist } from '@/types.d';
 import { PlusCircleIcon } from '@heroicons/react/24/solid';
 import MoodManager from '../components/MoodManager';
 import { PlaceholderImage } from "../components/PlaceholderImage";
+import { HomeIcon, StarIcon, ChatBubbleLeftRightIcon, QueueListIcon } from '@heroicons/react/24/solid';
 
 type SpotifyApi = {
   getMe: () => Promise<{ body: UserProfile }>;
@@ -731,30 +732,38 @@ const CreateMoodModal = ({ show, onClose, onSave }: {
   );
 };
 
-// Define tab options using string constants to avoid type issues
+// --- Tab Constants ---
 const TABS = {
-  TRACKS: 'Tracks',
+  OVERVIEW: 'Overview',
+  RATINGS: 'Ratings',
+  REVIEWS: 'Reviews',
   PLAYLISTS: 'Playlists',
-  PROFILE: 'Profile',
   MOODS: 'Moods',
-  OVERVIEW: 'overview',
-  ALBUMS: 'albums',
-  RATINGS: 'ratings',
-  STATS: 'stats'
+  ALBUMS: 'Albums', // Added back
+  TRACKS: 'Tracks', // Added back
+  STATS: 'Stats',   // Added back
+  // LIKED_SONGS: 'Liked Songs',
+  // SAVED_ALBUMS: 'Saved Albums',
+  // FOLLOWING: 'Following',
 };
 
-const tabItems = [
-  { name: TABS.TRACKS, icon: <div className="h-5 w-5">🎵</div> },
-  { name: TABS.PLAYLISTS, icon: <div className="h-5 w-5">📋</div> },
-  { name: TABS.PROFILE, icon: <div className="h-5 w-5">👤</div> },
-  { name: TABS.MOODS, icon: <div className="h-5 w-5">😊</div> },
+const tabConfig = [
+  { name: TABS.OVERVIEW, icon: <HomeIcon className="h-5 w-5" /> },
+  { name: TABS.RATINGS, icon: <StarIcon className="h-5 w-5" /> },
+  { name: TABS.REVIEWS, icon: <ChatBubbleLeftRightIcon className="h-5 w-5" /> },
+  { name: TABS.PLAYLISTS, icon: <QueueListIcon className="h-5 w-5" /> },
+  { name: TABS.MOODS, icon: <div className="h-5 w-5">😊</div> }, // Simple emoji icon
+  // { name: TABS.LIKED_SONGS, icon: <HeartIcon className="h-5 w-5" /> },
+  // { name: TABS.SAVED_ALBUMS, icon: <BookmarkSquareIcon className="h-5 w-5" /> },
+  // { name: TABS.FOLLOWING, icon: <UsersIcon className="h-5 w-5" /> },
 ];
 
+// --- Existing Profile Page Component --- 
 export default function Profile() {
   const { data: session, status } = useSession();
   const router = useRouter();
   const searchParams = useSearchParams();
-  const selectedTabParam = searchParams.get('tab');
+  const pathname = usePathname();
   
   // State for profile data
   const [profile, setProfile] = useState<UserProfile | null>(null);
@@ -1081,29 +1090,29 @@ export default function Profile() {
 
   // Modified render function for ratings content
   const renderRatingsContent = () => {
-    return (
+        return (
       <div className="animate-fadeIn">
-        <h2 className="text-2xl font-bold mb-6">Your Ratings</h2>
-        
-        {userRatingsLoading && (
-          <div className="flex justify-center items-center h-40">
-            <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-[#1DB954]"></div>
-          </div>
-        )}
-        
-        {userRatingsError && !userRatingsLoading && (
-          <div className="bg-red-900/20 border border-red-500 rounded-lg p-4 mb-6">
-            <p className="text-red-300">{userRatingsError}</p>
+            <h2 className="text-2xl font-bold mb-6">Your Ratings</h2>
+            
+            {userRatingsLoading && (
+              <div className="flex justify-center items-center h-40">
+                <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-[#1DB954]"></div>
+                </div>
+            )}
+            
+            {userRatingsError && !userRatingsLoading && (
+              <div className="bg-red-900/20 border border-red-500 rounded-lg p-4 mb-6">
+                <p className="text-red-300">{userRatingsError}</p>
             <button 
               onClick={fetchUserRatings}
               className="mt-2 px-4 py-1 bg-red-900/30 hover:bg-red-800/40 rounded-full text-sm transition-colors"
             >
               Retry
             </button>
-          </div>
-        )}
-        
-        {!userRatingsLoading && (!userRatings || userRatings.length === 0) && !userRatingsError && (
+              </div>
+            )}
+            
+            {!userRatingsLoading && (!userRatings || userRatings.length === 0) && !userRatingsError && (
           <div className="text-center py-8 bg-[#181818] rounded-lg p-6">
             <div className="mb-4 text-[#1DB954]">
               <svg xmlns="http://www.w3.org/2000/svg" className="h-16 w-16 mx-auto" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -1113,12 +1122,12 @@ export default function Profile() {
             <p className="text-gray-400 mb-4 text-lg">You haven't rated any tracks or albums yet</p>
             <p className="text-gray-500 mb-6">Share your opinions and keep track of your favorite music</p>
             <Link href="/discover" className="px-6 py-3 bg-[#1DB954] text-black font-medium rounded-full inline-block hover:bg-opacity-90 transition-colors">
-              Discover Music to Rate
-            </Link>
-          </div>
-        )}
-        
-        {userRatings && userRatings.length > 0 && (
+                  Discover Music to Rate
+                </Link>
+              </div>
+            )}
+            
+            {userRatings && userRatings.length > 0 && (
           <div className="space-y-10">
             {/* Track Ratings Section */}
             {userRatings.filter(rating => rating.item_type === 'track').length > 0 && (
@@ -1130,12 +1139,12 @@ export default function Profile() {
                   Track Ratings
                 </h3>
                 <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-5">
-                  {userRatings
-                    .filter(rating => rating.item_type === 'track')
-                    .map((rating) => (
+                    {userRatings
+                      .filter(rating => rating.item_type === 'track')
+                      .map((rating) => (
                       <div key={rating.id} className="group bg-[#202020] hover:bg-[#282828] rounded-lg overflow-hidden shadow-lg transition-all duration-300 hover:shadow-xl hover:-translate-y-1">
                         <Link href={`/track/${rating.spotify_id || rating.item_id}`}>
-                          <div className="relative aspect-square">
+                            <div className="relative aspect-square">
                             {rating.image_url ? (
                               <Image
                                 src={rating.image_url}
@@ -1152,7 +1161,7 @@ export default function Profile() {
                             {/* Always render placeholder, but it's hidden when image loads successfully */}
                             <div className={`absolute inset-0 ${rating.image_url ? 'opacity-0' : 'opacity-100'}`}>
                               <PlaceholderImage type="track" />
-                            </div>
+                    </div>
                             {/* Add back the gradient overlay */}
                             <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/30 to-transparent opacity-70 group-hover:opacity-90 transition-opacity"></div>
                             <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
@@ -1160,7 +1169,7 @@ export default function Profile() {
                                 <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" viewBox="0 0 20 20" fill="currentColor">
                                   <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM9.555 7.168A1 1 0 008 8v4a1 1 0 001.555.832l3-2a1 1 0 000-1.664l-3-2z" clipRule="evenodd" />
                                 </svg>
-                              </div>
+                    </div>
                             </div>
                           </div>
                           <div className="absolute bottom-0 right-0 m-2 bg-black/80 rounded-full px-2 py-1 flex items-center z-10">
@@ -1171,15 +1180,15 @@ export default function Profile() {
                             <h4 className="font-medium line-clamp-1 text-white group-hover:text-[#1DB954] transition-colors">{rating.name || 'Unknown Track'}</h4>
                             <p className="text-sm text-gray-400 line-clamp-1">{rating.artist_name || 'Unknown Artist'}</p>
                             <p className="text-xs text-gray-500 mt-1">{new Date(rating.created_at).toLocaleDateString()}</p>
-                          </div>
-                        </Link>
-                      </div>
-                    ))
-                  }
-                </div>
-              </div>
+                  </div>
+                    </Link>
+                        </div>
+                      ))
+                    }
+                  </div>
+                        </div>
             )}
-            
+                        
             {/* Album Ratings Section */}
             {userRatings.filter(rating => rating.item_type === 'album').length > 0 && (
               <div className="bg-[#181818]/60 p-6 rounded-xl border border-gray-800">
@@ -1190,12 +1199,12 @@ export default function Profile() {
                   Album Ratings
                 </h3>
                 <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-5">
-                  {userRatings
-                    .filter(rating => rating.item_type === 'album')
-                    .map((rating) => (
+                    {userRatings
+                      .filter(rating => rating.item_type === 'album')
+                      .map((rating) => (
                       <div key={rating.id} className="group bg-[#202020] hover:bg-[#282828] rounded-lg overflow-hidden shadow-lg transition-all duration-300 hover:shadow-xl hover:-translate-y-1">
                         <Link href={`/album/${rating.spotify_id || rating.item_id}`}>
-                          <div className="relative aspect-square">
+                            <div className="relative aspect-square">
                             {rating.image_url ? (
                               <Image
                                 src={rating.image_url}
@@ -1212,7 +1221,7 @@ export default function Profile() {
                             {/* Always render placeholder, but it's hidden when image loads successfully */}
                             <div className={`absolute inset-0 ${rating.image_url ? 'opacity-0' : 'opacity-100'}`}>
                               <PlaceholderImage type="album" />
-                            </div>
+                        </div>
                             {/* Add back the gradient overlay */}
                             <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/30 to-transparent opacity-70 group-hover:opacity-90 transition-opacity"></div>
                             <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
@@ -1220,7 +1229,7 @@ export default function Profile() {
                                 <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" viewBox="0 0 20 20" fill="currentColor">
                                   <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM9.555 7.168A1 1 0 008 8v4a1 1 0 001.555.832l3-2a1 1 0 000-1.664l-3-2z" clipRule="evenodd" />
                                 </svg>
-                              </div>
+                      </div>
                             </div>
                           </div>
                           <div className="absolute bottom-0 right-0 m-2 bg-black/80 rounded-full px-2 py-1 flex items-center z-10">
@@ -1231,22 +1240,22 @@ export default function Profile() {
                             <h4 className="font-medium line-clamp-1 text-white group-hover:text-[#1DB954] transition-colors">{rating.name || 'Unknown Album'}</h4>
                             <p className="text-sm text-gray-400 line-clamp-1">{rating.artist_name || 'Unknown Artist'}</p>
                             <p className="text-xs text-gray-500 mt-1">{new Date(rating.created_at).toLocaleDateString()}</p>
-                          </div>
-                        </Link>
-                      </div>
-                    ))
-                  }
-                </div>
+                        </div>
+                          </Link>
+                    </div>
+                      ))
+                    }
+                  </div>
               </div>
             )}
-            
+                
             {userRatings.length > 20 && (
               <div className="text-center mt-8">
                 <Link 
                   href="/profile/ratings" 
                   className="inline-flex items-center px-6 py-3 bg-white/10 hover:bg-white/20 rounded-full text-sm transition-colors"
                 >
-                  See All Ratings
+                      See All Ratings
                   <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 ml-2" viewBox="0 0 20 20" fill="currentColor">
                     <path fillRule="evenodd" d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z" clipRule="evenodd" />
                   </svg>
@@ -1278,8 +1287,8 @@ export default function Profile() {
             </div>
           </div>
         )}
-      </div>
-    );
+          </div>
+        );
   };
   
   // Modified render function for tracks content
@@ -1436,11 +1445,11 @@ export default function Profile() {
                 >
                   <Link href={`/artist/${artist.id}`} className="block">
                     <div className="w-20 h-20 sm:w-24 sm:h-24 md:w-28 md:h-28 overflow-hidden rounded-full mb-2">
-                      <img 
-                        src={artist.images?.[0]?.url || '/placeholder.png'} 
-                        alt={artist.name} 
+                    <img 
+                      src={artist.images?.[0]?.url || '/placeholder.png'} 
+                      alt={artist.name} 
                         className="w-full h-full object-cover"
-                      />
+                    />
                     </div>
                     <div className="text-center mt-2">
                       <h3 className="font-medium text-sm truncate max-w-[120px] mx-auto">{artist.name}</h3>
@@ -1531,9 +1540,9 @@ export default function Profile() {
                 <button className="bg-[#282828] hover:bg-[#333] text-white font-bold px-4 py-2 rounded-full text-sm transition-colors">
                   Edit Profile
                 </button>
-              </div>
-            </div>
-          </div>
+                      </div>
+                    </div>
+                  </div>
         </div>
                 
         {/* Profile Tabs */}

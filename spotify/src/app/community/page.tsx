@@ -190,7 +190,6 @@ export default function Community() {
   const [topTracks, setTopTracks] = useState<any[]>([]);
   const [topAlbums, setTopAlbums] = useState<any[]>([]);
   const [activities, setActivities] = useState<any[]>([]);
-  const [themedPlaylists, setThemedPlaylists] = useState<any[]>([]);
   const [activeUsers, setActiveUsers] = useState<any[]>([]);
   const [activeUsersLoading, setActiveUsersLoading] = useState(true);
   
@@ -214,12 +213,6 @@ export default function Community() {
       // Fetch activities
       console.log('Fetching community activities');
       const activitiesResponse = await fetch('/api/community/activity?limit=5', {
-        cache: 'no-store'
-      });
-      
-      // Fetch themed playlists
-      console.log('Fetching community playlists');
-      const playlistsResponse = await fetch('/api/community/playlists?limit=6', {
         cache: 'no-store'
       });
       
@@ -252,43 +245,22 @@ export default function Community() {
       };
       
       // Process responses
-      if (tracksResponse.ok) {
+      if (tracksResponse.ok && albumsResponse.ok && activitiesResponse.ok) {
         const tracksData = await tracksResponse.json();
-        setTopTracks(tracksData.items || []);
-        console.log('Tracks loaded:', tracksData.items?.length || 0);
-      } else {
-        console.error('Failed to fetch top tracks:', await tracksResponse.text());
-        setTopTracks([]);
-      }
-      
-      if (albumsResponse.ok) {
         const albumsData = await albumsResponse.json();
-        setTopAlbums(albumsData.items || []);
-        console.log('Albums loaded:', albumsData.items?.length || 0);
-      } else {
-        console.error('Failed to fetch top albums:', await albumsResponse.text());
-        setTopAlbums([]);
-      }
-      
-      if (activitiesResponse.ok) {
         const activitiesData = await activitiesResponse.json();
+        
+        setTopTracks(tracksData.items || []);
+        setTopAlbums(albumsData.items || []);
         setActivities(activitiesData.activities || []);
-        console.log('Activities loaded:', activitiesData.activities?.length || 0);
+        
+        fetchUsers();
       } else {
-        console.error('Failed to fetch activities:', await activitiesResponse.text());
+        console.error('Failed to fetch some data');
+        setTopTracks([]);
+        setTopAlbums([]);
         setActivities([]);
       }
-      
-      if (playlistsResponse.ok) {
-        const playlistsData = await playlistsResponse.json();
-        setThemedPlaylists(playlistsData.playlists || []);
-        console.log('Playlists loaded:', playlistsData.playlists?.length || 0);
-      } else {
-        console.error('Failed to fetch playlists:', await playlistsResponse.text());
-        setThemedPlaylists([]);
-      }
-      
-      fetchUsers();
       
     } catch (error) {
       console.error('Error fetching community data:', error);
@@ -411,110 +383,6 @@ export default function Community() {
                 )}
               </div>
             </div>
-            
-            {/* Themed Playlists Section */}
-            <div className="mb-12">
-              <div className="flex justify-between items-center mb-4">
-                <h2 className="text-2xl font-bold">Themed Playlists</h2>
-                <div className="flex items-center gap-4">
-                  <Link href="/community/playlists" className="text-[#1DB954] hover:underline text-sm">
-                    View all →
-                  </Link>
-                  <Link
-                    href="/community/playlists/create"
-                    className="bg-[#1DB954] text-black text-sm font-bold py-1.5 px-3 rounded-full hover:scale-105 transition-transform"
-                  >
-                    Create
-                  </Link>
-                </div>
-              </div>
-              
-              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
-                {themedPlaylists.map((playlist) => (
-                  <div 
-                    key={playlist.id}
-                    className="bg-[#181818] rounded-lg overflow-hidden"
-                  >
-                    <Link href={`/community/playlists/${playlist.id}`}>
-                      <div className="aspect-square relative">
-                        <Image
-                          src={playlist.cover_image || '/placeholder-playlist.png'}
-                          alt={playlist.name}
-                          fill
-                          sizes="(max-width: 640px) 100vw, (max-width: 768px) 50vw, 25vw"
-                          className="object-cover"
-                        />
-                        <div className="absolute inset-0 bg-gradient-to-t from-black/70 to-transparent flex flex-col justify-end p-4">
-                          <div className="bg-[#1DB954] text-black text-xs rounded-full px-2 py-1 inline-block mb-2 w-fit">
-                            {playlist.theme?.type?.toUpperCase() || 'PLAYLIST'}
-                          </div>
-                          <h3 className="font-medium text-lg line-clamp-1">{playlist.name}</h3>
-                          <p className="text-gray-300 text-sm line-clamp-1">{playlist.theme?.name || 'Community Playlist'}</p>
-                          <div className="flex items-center mt-2 text-sm">
-                            <span className="text-gray-400">{playlist.votes_count || 0} likes</span>
-                          </div>
-                        </div>
-                      </div>
-                    </Link>
-                  </div>
-                ))}
-                
-                {themedPlaylists.length === 0 && (
-                  <div className="col-span-full py-10 text-center">
-                    <p className="text-gray-400">No community playlists yet</p>
-                    <p className="text-sm text-gray-500 mt-2">
-                      <Link href="/community/playlists/create" className="text-[#1DB954] hover:underline">
-                        Create the first playlist
-                      </Link>
-                    </p>
-                  </div>
-                )}
-              </div>
-            </div>
-            
-            {/* User Compatibility Section - only shown when logged in */}
-            {session && status === "authenticated" && (
-              <motion.div 
-                className="mt-4 bg-[#181818] p-6 rounded-lg"
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.5, delay: 0.2 }}
-              >
-                <h2 className="text-xl font-bold mb-4">Users With Similar Taste</h2>
-                <p className="text-[#B3B3B3] mb-6">
-                  Based on your ratings, you might enjoy following these users:
-                </p>
-                
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                  {/* Mock compatible users for now */}
-                  {[
-                    { id: 'user1', name: 'Emma Thompson', image: 'https://i.pravatar.cc/150?img=5', compatibility: 87 },
-                    { id: 'user2', name: 'Michael Chen', image: 'https://i.pravatar.cc/150?img=12', compatibility: 82 },
-                    { id: 'user3', name: 'Sarah Johnson', image: 'https://i.pravatar.cc/150?img=9', compatibility: 79 }
-                  ].map((user) => (
-                    <div key={user.id} className="flex items-center gap-3 p-3 bg-[#282828] rounded-lg">
-                      <div className="w-12 h-12 rounded-full overflow-hidden relative">
-                        <Image 
-                          src={user.image} 
-                          alt={user.name} 
-                          fill
-                          sizes="48px"
-                          className="object-cover"
-                        />
-                      </div>
-                      <div>
-                        <Link href={`/user/${user.id}`} className="font-medium hover:underline">
-                          {user.name}
-                        </Link>
-                        <div className="text-sm text-[#1DB954]">
-                          {user.compatibility}% match
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </motion.div>
-            )}
           </div>
           
           {/* Right Column - Activity Feed */}

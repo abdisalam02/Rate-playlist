@@ -87,6 +87,19 @@ const formatDuration = (ms: number): string => {
   return `${minutes}:${seconds.toString().padStart(2, '0')}`;
 };
 
+// Helper function to construct API URL with conditional client credentials
+const buildApiUrl = (basePath: string, params: Record<string, any> = {}) => {
+  // Always use client credentials if not authenticated
+  const useCredentials = sessionStatus !== 'authenticated'; 
+  const query = new URLSearchParams({
+    ...params,
+    // Only add use_client_credentials if true
+    ...(useCredentials && { use_client_credentials: 'true' }), 
+  });
+  const url = `${basePath}?${query.toString()}`;
+  console.log(`FRONTEND: Fetching from: ${url}`); // Log the final URL
+  return url;
+};
 
 // --- COMPONENT DEFINITIONS ---
 
@@ -263,7 +276,7 @@ function SectionHeader({ title, viewAllLink }: { title: string; viewAllLink?: st
 
 // --- MAIN DISCOVER PAGE COMPONENT ---
 export default function Discover() {
-  const { data: session } = useSession();
+  const { data: session, status: sessionStatus } = useSession();
   
   const [newReleases, setNewReleases] = useState<Album[]>([]);
   const [popularAlbums, setPopularAlbums] = useState<Album[]>([]);
@@ -314,7 +327,7 @@ export default function Discover() {
   };
   
   useEffect(() => {
-    console.log("Discover Page: useEffect triggered. Session status:", session ? "authenticated" : "unauthenticated");
+    console.log("Discover Page: useEffect triggered. Session status:", sessionStatus);
     
     // Determine if we should use client credentials based on session state
     const shouldUseClientCreds = !session || !session.user;
@@ -334,7 +347,7 @@ export default function Discover() {
       console.log("FRONTEND: Skipping user recommendations fetch - user not authenticated.");
     }
 
-  }, [session]); // Dependency array
+  }, [session, sessionStatus]); // Dependency array
   
   // --- LOADING SKELETONS ---
   const renderCardSkeletons = (count: number, type: 'album' | 'track' = 'album') => {
@@ -387,57 +400,63 @@ export default function Discover() {
 
   // --- Fetch Featured Tracks ---
   const fetchFeaturedTracks = async () => {
+    setLoadingFeaturedTracks(true); setErrorFeaturedTracks(null);
     try {
-      setLoadingFeaturedTracks(true); setErrorFeaturedTracks(null);
-      const url = `/api/discover/home-featured-tracks?tracks_per_playlist=8&shuffle=true&use_client_credentials=true`;
-      console.log("FRONTEND: Fetching Featured Tracks from:", url);
-      const response = await fetch(url, { cache: 'no-store' });
-      console.log(`FRONTEND: Featured Tracks Response Status: ${response.status}`);
-      if (!response.ok) { throw new Error(`Featured Tracks API Error: ${response.status}`); }
+      const apiUrl = buildApiUrl('/api/discover/home-featured-tracks', { tracks_per_playlist: 8, shuffle: 'true' });
+      const response = await fetch(apiUrl);
+      console.log('FRONTEND: Featured Tracks Response Status:', response.status);
+      if (!response.ok) {
+        throw new Error(`Featured Tracks API Error: ${response.status}`);
+      }
       const data = await response.json();
-      console.log("FRONTEND: Featured Tracks Data Received:", data);
-      if (data.tracks && Array.isArray(data.tracks)) {
+      console.log('FRONTEND: Featured Tracks Data Received:', data);
+      if (data && data.tracks) {
         setFeaturedTracks(processTrackImages(data.tracks));
-      } else { throw new Error("Invalid featured tracks data format"); }
-    } catch (error) {
-      console.error('FRONTEND: Error fetching featured tracks:', error);
-      setErrorFeaturedTracks(`Failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      }
+    } catch (err: any) {
+      console.error('FRONTEND: Error fetching featured tracks:', err);
+      setErrorFeaturedTracks(err.message || 'Failed to load featured tracks');
       setFeaturedTracks([]);
-    } finally { setLoadingFeaturedTracks(false); }
+    } finally {
+      setLoadingFeaturedTracks(false);
+    }
   };
 
   // --- Fetch New Releases ---
   const fetchNewReleases = async () => {
+    setLoadingReleases(true); setErrorReleases(null);
     try {
-      setLoadingReleases(true); setErrorReleases(null);
-      const url = `/api/discover/new-releases?limit=6&use_client_credentials=true`;
-      console.log("FRONTEND: Fetching New Releases from:", url);
-      const response = await fetch(url, { cache: 'no-store' });
-      console.log(`FRONTEND: New Releases Response Status: ${response.status}`);
-      if (!response.ok) { throw new Error(`New Releases API Error: ${response.status}`); }
+      const apiUrl = buildApiUrl('/api/discover/new-releases', { limit: 6 });
+      const response = await fetch(apiUrl);
+      console.log('FRONTEND: New Releases Response Status:', response.status);
+      if (!response.ok) {
+        throw new Error(`New Releases API Error: ${response.status}`);
+      }
       const data = await response.json();
-      console.log("FRONTEND: New Releases Data Received:", data);
-      if (data.albums?.items && Array.isArray(data.albums.items)) {
+      console.log('FRONTEND: New Releases Data Received:', data);
+      if (data && data.albums && data.albums.items) {
         setNewReleases(processAlbumImages(data.albums.items));
-      } else { throw new Error("Invalid new releases data format"); }
-    } catch (error) {
-      console.error('FRONTEND: Error fetching new releases:', error);
-      setErrorReleases(`Failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      }
+    } catch (err: any) {
+      console.error('FRONTEND: Error fetching new releases:', err);
+      setErrorReleases(err.message || 'Failed to load new releases');
       setNewReleases([]);
-    } finally { setLoadingReleases(false); }
+    } finally {
+      setLoadingReleases(false);
+    }
   };
 
   // --- Fetch Popular Albums ---
   const fetchPopularAlbums = async () => {
+    setLoadingPopularAlbums(true); setErrorPopularAlbums(null); setPopularAlbumsSource(null);
+    
+    // Always use client credentials for public content
+    const apiUrl = buildApiUrl('/api/discover/featured-albums', { limit: 3 });
+    
+    console.log("FRONTEND: Fetching Featured Albums from:", apiUrl);
+    
     try {
-      setLoadingPopularAlbums(true); setErrorPopularAlbums(null); setPopularAlbumsSource(null);
-      
-      // Always use client credentials for public content
-      const url = `/api/discover/featured-albums?limit=3&use_client_credentials=true`;
-      
-      console.log("FRONTEND: Fetching Featured Albums from:", url);
-      
-      const response = await fetch(url, { cache: 'no-store' });
+      const response = await fetch(apiUrl);
       console.log(`FRONTEND: Featured Albums Response Status: ${response.status}`);
       if (!response.ok) { throw new Error(`Featured Albums API Error: ${response.status}`); }
       const data = await response.json();
@@ -471,84 +490,85 @@ export default function Discover() {
 
   // --- Fetch Trending Tracks (Popular Tracks) ---
   const fetchPopularTracks = async () => {
+    setLoadingPopularTracks(true); setErrorPopularTracks(null); setPopularTracksSource(null);
+    
+    // Always use client credentials for public content
+    const apiUrl = buildApiUrl('/api/discover/current-hits', { limit: 5 });
+    
+    console.log("FRONTEND: Fetching Current Hits from:", apiUrl);
+    
     try {
-        setLoadingPopularTracks(true); setErrorPopularTracks(null); setPopularTracksSource(null);
-        
-        // Always use client credentials for public content
-        const url = `/api/discover/current-hits?limit=5&use_client_credentials=true`;
-        
-        console.log("FRONTEND: Fetching Current Hits from:", url);
-        
-        const response = await fetch(url, { cache: 'no-store' });
-        console.log(`FRONTEND: Current Hits Response Status: ${response.status}`);
-        if (!response.ok) { throw new Error(`Current Hits API Error: ${response.status}`); }
-        const data = await response.json();
-        console.log("FRONTEND: Received Current Hits Data:", data);
-        if (data.tracks && Array.isArray(data.tracks)) {
-          console.log("PROCESSED CURRENT HITS DATA:", {
-            before: data.tracks.slice(0, 2),
-            source: data.source,
-            trackCount: data.tracks.length
-          });
-          setPopularTracks(processTrackImages(data.tracks));
-          setPopularTracksSource(data.source ? `${data.source}${data.is_mock ? ' (Mock)' : ''}` : 'Unknown');
-          console.log("AFTER SETTING STATE - Popular Tracks:", popularTracks.length);
-        } else { 
-          console.error("Invalid current hits data format:", data);
-          throw new Error("Invalid current hits data format"); 
-        }
-      } catch (error) {
-        console.error('FRONTEND: Error fetching current hits:', error);
-        setErrorPopularTracks(`Failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
-        setPopularTracks([]); setPopularTracksSource('Error');
-      } finally { setLoadingPopularTracks(false); }
-   };
+      const response = await fetch(apiUrl);
+      console.log(`FRONTEND: Current Hits Response Status: ${response.status}`);
+      if (!response.ok) { throw new Error(`Current Hits API Error: ${response.status}`); }
+      const data = await response.json();
+      console.log("FRONTEND: Received Current Hits Data:", data);
+      if (data.tracks && Array.isArray(data.tracks)) {
+        console.log("PROCESSED CURRENT HITS DATA:", {
+          before: data.tracks.slice(0, 2),
+          source: data.source,
+          trackCount: data.tracks.length
+        });
+        setPopularTracks(processTrackImages(data.tracks));
+        setPopularTracksSource(data.source ? `${data.source}${data.is_mock ? ' (Mock)' : ''}` : 'Unknown');
+        console.log("AFTER SETTING STATE - Popular Tracks:", popularTracks.length);
+      } else { 
+        console.error("Invalid current hits data format:", data);
+        throw new Error("Invalid current hits data format"); 
+      }
+    } catch (error) {
+      console.error('FRONTEND: Error fetching current hits:', error);
+      setErrorPopularTracks(`Failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      setPopularTracks([]); setPopularTracksSource('Error');
+    } finally { setLoadingPopularTracks(false); }
+  };
 
   // --- Fetch Top Streamed Tracks ---
   const fetchTopStreamedTracks = async () => {
-     try {
-      setLoadingTopStreamed(true); setErrorTopStreamed(null);
-      const url = `/api/discover/top-streamed?limit=5&use_client_credentials=true`;
-      console.log("FRONTEND: Fetching Top Streamed from:", url);
-      const response = await fetch(url, { cache: 'no-store' });
-      console.log(`FRONTEND: Top Streamed Response Status: ${response.status}`);
-      if (!response.ok) { throw new Error(`Top Streamed API Error: ${response.status}`); }
+    if (sessionStatus !== 'authenticated') {
+      console.log('FRONTEND: Skipping Top Streamed - User not authenticated');
+      return; // Don't fetch if not logged in
+    }
+    setLoadingTopStreamed(true); setErrorTopStreamed(null);
+    try {
+      // NOTE: No use_client_credentials here - relies on session
+      const apiUrl = buildApiUrl('/api/discover/top-streamed', { limit: 5 }); 
+      const response = await fetch(apiUrl);
+      console.log('FRONTEND: Top Streamed Response Status:', response.status);
+      if (!response.ok) {
+        throw new Error(`Top Streamed API Error: ${response.status}`);
+      }
       const data = await response.json();
-      console.log("FRONTEND: Top Streamed Data Received:", data);
-      let tracks: Track[] = [];
-      if (data.tracks && Array.isArray(data.tracks)) { tracks = data.tracks; }
-      else if (data.items && Array.isArray(data.items)) { tracks = data.items; } // Handle alternative format
-      else { throw new Error("Invalid top streamed tracks data format"); }
-      setTopStreamedTracks(processTrackImages(tracks));
-    } catch (error) {
-      console.error('FRONTEND: Error fetching top streamed tracks:', error);
-      setErrorTopStreamed(`Failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      console.log('FRONTEND: Top Streamed Data Received:', data);
+      setTopStreamedTracks(processTrackImages(data?.tracks || [])); // Use data?.tracks
+    } catch (err: any) {
+      console.error('FRONTEND: Error fetching top streamed tracks:', err);
+      setErrorTopStreamed(`Failed: ${err.message || 'Failed to load top streamed tracks'}`);
       setTopStreamedTracks([]);
     } finally { setLoadingTopStreamed(false); }
   };
 
   // --- Fetch User Recommendations ---
   const fetchUserRecommendations = async () => {
-    if (!session?.user) {
-        console.log("FRONTEND: Skipping user recommendations fetch - user not authenticated.");
-        setLoadingUserRecs(false); setUserRecommendations([]); setErrorUserRecs(null); return;
+    if (sessionStatus !== 'authenticated') {
+      console.log('FRONTEND: Skipping User Recommendations - User not authenticated');
+      return; // Don't fetch if not logged in
     }
+    setLoadingUserRecs(true); setErrorUserRecs(null);
     try {
-      setLoadingUserRecs(true); setErrorUserRecs(null);
-      const url = `/api/discover/user-recommendations?limit=2`;
-      console.log("FRONTEND: Fetching User Recommendations from:", url);
-      const response = await fetch(url, { cache: 'no-store' }); // Assumes cookies are sent
-      console.log(`FRONTEND: User Recs Response Status: ${response.status}`);
+      // NOTE: No use_client_credentials here - relies on session
+      const apiUrl = buildApiUrl('/api/discover/user-recommendations', { limit: 2 }); 
+      const response = await fetch(apiUrl);
+      console.log('FRONTEND: User Recs Response Status:', response.status);
       if (!response.ok) {
-        if (response.status === 401) { throw new Error(`User Recs Error: Unauthorized (401).`); }
-        throw new Error(`User Recs API Error: ${response.status}`);
+        throw new Error(`User Recommendations API Error: ${response.status}`);
       }
       const data = await response.json();
-      console.log("FRONTEND: User Recommendations Data Received:", data);
-      setUserRecommendations(data.recommendations || []);
-    } catch (error) {
-      console.error('FRONTEND: Error fetching user recommendations:', error);
-      setErrorUserRecs(`Failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      console.log('FRONTEND: User Recommendations Data Received:', data);
+      setUserRecommendations(data?.recommendations || []);
+    } catch (err: any) {
+      console.error('FRONTEND: Error fetching user recommendations:', err);
+      setErrorUserRecs(`Failed: ${err.message || 'Failed to load recommendations'}`);
       setUserRecommendations([]);
     } finally { setLoadingUserRecs(false); }
   };

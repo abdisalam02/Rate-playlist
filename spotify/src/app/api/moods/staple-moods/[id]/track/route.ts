@@ -30,10 +30,17 @@ function createApiResponse(success: boolean, data: any = null, message: string =
  */
 export async function POST(
   request: Request,
-  { params }: { params: { id: string } }
+  { params }: { params: { id?: string } }
 ) {
-  // Get the mood ID safely from params
-  const { id: moodId } = params;
+  // Await params before accessing
+  const awaitedParams = await params;
+  const moodId = awaitedParams?.id;
+  
+  if (!moodId) {
+    console.error('[API Staple Mood Track POST] Mood ID is missing.');
+    return createApiResponse(false, null, 'Mood ID is required');
+  }
+
   console.log(`POST /api/moods/staple-moods/${moodId}/track - Adding track to staple mood`);
   
   try {
@@ -125,32 +132,69 @@ export async function POST(
       return createApiResponse(false, null, 'Missing required track data');
     }
     
+    // Check for a replace parameter in the request
+    const url = new URL(request.url);
+    const replace = url.searchParams.get('replace') === 'true';
+    
+    if (replace) {
+      console.log('Replace mode enabled - removing existing tracks before adding new one');
+      try {
+        // Remove any existing tracks for this user and mood
+        await removeTrackFromStapleMood(userId, moodId);
+        console.log('Successfully removed existing tracks');
+      } catch (removeError) {
+        console.error('Error removing existing tracks:', removeError);
+        // Continue anyway to try adding the new track
+      }
+    }
+    
     try {
     // Add track to staple mood
       const result = await addTrackToStapleMood(userId, moodId, trackData);
-    console.log('Track added to staple mood:', result);
-    
-    return createApiResponse(true, result, 'Track added successfully');
+      console.log('Track added to staple mood:', result);
+      
+      return createApiResponse(true, result, 'Track added successfully');
     } catch (error) {
-      console.error('Error adding track to staple mood:', error);
+      console.error('Error adding track to staple mood (in try block):', error);
       
-      // In development mode, return a success message for testing
-      if (isDevelopment) {
-        console.log('Development mode: returning mock success response');
-        return createApiResponse(true, { id: `mock-${Date.now()}` }, 'Track added successfully (dev mode)');
+      // Check if it's a Supabase error and specifically the unique constraint violation
+      let errorMessage = 'Error adding track: Unknown error';
+      let statusCode = 500;
+
+      if (error && typeof error === 'object' && 'code' in error) {
+        // Check for unique constraint error
+        if (error.code === '23505') {
+          // Check if the error contains the track_id in the details
+          if ('details' in error && typeof error.details === 'string' && 
+              error.details.includes(trackData.track_id)) {
+            errorMessage = `This track "${trackData.track_name}" is already in this staple mood.`;
+          } else {
+            errorMessage = `You can only have one track per staple mood due to database constraints. Use ?replace=true to replace the existing track.`;
+          }
+          statusCode = 409; // Conflict status code
+        } else {
+          errorMessage = `Error adding track: Database error (${error.code})`;
+        }
+      } else if (error instanceof Error) {
+        errorMessage = `Error adding track: ${error.message}`;
       }
-      
-      return createApiResponse(false, null, 
-        `Error adding track: ${error instanceof Error ? error.message : 'Unknown error'}`);
+
+      return NextResponse.json({ 
+        success: false, 
+        timestamp: new Date().toISOString(),
+        data: null, 
+        message: errorMessage 
+      }, { 
+        status: statusCode,
+        headers: {
+          'Access-Control-Allow-Origin': '*',
+          'Access-Control-Allow-Methods': 'GET, POST, DELETE, OPTIONS',
+          'Access-Control-Allow-Headers': 'Content-Type, Authorization'
+        }
+      });
     }
   } catch (error) {
-    console.error('Error adding track to staple mood:', error);
-    
-    // In development mode, return a success response for testing
-    if (process.env.NODE_ENV === 'development') {
-      console.log('Development mode: returning mock success response after error');
-      return createApiResponse(true, { id: `mock-error-${Date.now()}` }, 'Track added successfully (dev mode after error)');
-    }
+    console.error('Error adding track to staple mood (outer catch):', error);
     
     return createApiResponse(false, null, 
       `Error adding track to staple mood: ${error instanceof Error ? error.message : 'Unknown error'}`);
@@ -160,10 +204,17 @@ export async function POST(
 // Handle DELETE requests to remove a track from a staple mood
 export async function DELETE(
   request: Request,
-  { params }: { params: { id: string } }
+  { params }: { params: { id?: string } }
 ) {
-  // Get the mood ID safely from params
-  const { id: moodId } = params;
+  // Await params before accessing
+  const awaitedParams = await params;
+  const moodId = awaitedParams?.id;
+
+  if (!moodId) {
+    console.error('[API Staple Mood Track DELETE] Mood ID is missing.');
+    return createApiResponse(false, null, 'Mood ID is required');
+  }
+
   console.log(`DELETE /api/moods/staple-moods/${moodId}/track - Removing track from staple mood`);
   
   try {

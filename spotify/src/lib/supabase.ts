@@ -308,12 +308,16 @@ export async function addTrackToStapleMood(userId: string, moodId: string, track
       throw new Error('Valid track data is required');
     }
     
-    // Check for existing track in this mood
+    // Check for existing track in this mood - this is a more specific check than the database constraint
+    // IMPORTANT: The database has a unique constraint on (user_id, staple_mood_id) which only allows 
+    // one track per staple mood per user. Ideally this should be changed to (user_id, staple_mood_id, track_id)
+    // to allow multiple tracks per mood.
     console.log('Supabase: Checking if track already exists in mood');
     try {
       const { data: existingTrack, error: lookupError } = await supabase
         .from('mood_tracks')
         .select('id')
+        .eq('user_id', userId)
         .eq('staple_mood_id', moodId)
         .eq('track_id', trackData.track_id)
         .maybeSingle();
@@ -324,7 +328,27 @@ export async function addTrackToStapleMood(userId: string, moodId: string, track
         console.log('Supabase: Track already exists in this mood, skipping insert');
         return existingTrack;
       }
+      
+      // Also check if any track exists for this user and mood due to the database constraint
+      const { data: existingAnyTrack, error: lookupAnyError } = await supabase
+        .from('mood_tracks')
+        .select('id, track_id, track_name')
+        .eq('user_id', userId)
+        .eq('staple_mood_id', moodId)
+        .maybeSingle();
+        
+      if (!lookupAnyError && existingAnyTrack) {
+        console.log(`Supabase: User already has a track in this mood: ${existingAnyTrack.track_name} (${existingAnyTrack.track_id})`);
+        throw {
+          code: '23505',
+          details: `User already has track ${existingAnyTrack.track_id} in this mood. Database constraint prevents adding multiple tracks per mood per user.`,
+          message: 'Only one track per staple mood per user allowed with current database constraints'
+        };
+      }
     } catch (e) {
+      if (e && typeof e === 'object' && 'code' in e) {
+        throw e; // Rethrow our custom error
+      }
       console.warn('Supabase: Exception checking for existing track:', e);
     }
     
@@ -365,8 +389,8 @@ export async function addTrackToStapleMood(userId: string, moodId: string, track
         const { data: existingTrack } = await supabase
           .from('mood_tracks')
           .select('*')
+          .eq('user_id', userId)
           .eq('staple_mood_id', moodId)
-          .eq('track_id', trackData.track_id)
           .single();
           
         if (existingTrack) {
@@ -386,12 +410,22 @@ export async function addTrackToStapleMood(userId: string, moodId: string, track
   }
 }
 
-export async function removeTrackFromStapleMood(userId: string, stapleMoodId: string) {
-  const { error } = await supabase
+export async function removeTrackFromStapleMood(userId: string, stapleMoodId: string, trackId?: string) {
+  const query = supabase
     .from('mood_tracks')
     .delete()
     .eq('user_id', userId)
     .eq('staple_mood_id', stapleMoodId);
+    
+  // If trackId is provided, only delete the specific track
+  if (trackId) {
+    query.eq('track_id', trackId);
+    console.log(`Supabase: Removing specific track ${trackId} from staple mood ${stapleMoodId} for user ${userId}`);
+  } else {
+    console.log(`Supabase: Removing all tracks from staple mood ${stapleMoodId} for user ${userId}`);
+  }
+  
+  const { error } = await query;
   
   if (error) {
     console.error('Error removing track from staple mood:', error);

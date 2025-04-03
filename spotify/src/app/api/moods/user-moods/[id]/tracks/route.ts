@@ -32,7 +32,11 @@ export async function GET(
   request: Request,
   { params }: { params: { id: string } }
 ) {
-  console.log(`GET /api/moods/user-moods/${params.id}/tracks - Fetching tracks for user mood`);
+  // Await params before accessing
+  const awaitedParams = await params;
+  const moodId = awaitedParams.id; // Use awaited moodId
+
+  console.log(`GET /api/moods/user-moods/${moodId}/tracks - Fetching tracks for user mood`); // Use awaited moodId
   
   try {
     // Check if we're in development mode
@@ -55,7 +59,7 @@ export async function GET(
         
         // In development, try to find tracks for this mood regardless of user ID
         try {
-          console.log(`Dev mode: Fetching any tracks for mood ${params.id} regardless of user`);
+          console.log(`Dev mode: Fetching any tracks for mood ${moodId} regardless of user`);
           const { data, error } = await supabase
             .from('mood_tracks')
             .select(`
@@ -68,13 +72,13 @@ export async function GET(
               track_image,
               added_at
             `)
-            .eq('user_mood_id', params.id)
+            .eq('user_mood_id', moodId)
             .order('added_at', { ascending: false });
             
           if (error) {
             console.error('Error fetching tracks in dev mode:', error);
           } else {
-            console.log(`Dev mode: Retrieved ${data.length} tracks for mood ${params.id}`);
+            console.log(`Dev mode: Retrieved ${data.length} tracks for mood ${moodId}`);
             return createApiResponse(true, data);
           }
           
@@ -92,7 +96,7 @@ export async function GET(
     }
     
     // Get user ID
-    let userId = await getUserId();
+    const userId = await getUserId();
     console.log('Retrieved user ID for GET mood tracks:', userId);
     
     // For development mode, use a fallback user ID if needed
@@ -115,11 +119,11 @@ export async function GET(
     
     // Debug: List all tracks in the database for this mood
     try {
-      console.log(`Checking all tracks for mood ${params.id}`);
+      console.log(`Checking all tracks for mood ${moodId}`); // Use awaited moodId
       const { data: allTracks, error: allTracksError } = await supabase
-        .from('mood_tracks')
-        .select('*')
-        .eq('user_mood_id', params.id);
+        .from('mood_tracks') // Corrected table name
+        .select('id, track_id, track_name, user_id')
+        .eq('user_mood_id', moodId); // Use awaited moodId
         
       if (allTracksError) {
         console.error('Error listing all tracks for mood:', allTracksError);
@@ -139,38 +143,26 @@ export async function GET(
       console.warn('Error listing all tracks for mood:', error);
     }
     
-    // First try mood_tracks table for the specified mood ID
-    try {
-      console.log(`Fetching tracks from mood_tracks for mood ${params.id}`);
-      const { data: moodTracks, error } = await supabase
-        .from('mood_tracks')
-        .select(`
-          id,
-          user_mood_id,
-          user_id,
-          track_id,
-          track_name,
-          artist_name,
-          track_image,
-          added_at
-        `)
-        .eq('user_mood_id', params.id)
-        .order('added_at', { ascending: false });
-        
-      if (error) {
-        console.error('Error fetching from mood_tracks:', error);
-      } else if (moodTracks && moodTracks.length > 0) {
-        console.log(`Retrieved ${moodTracks.length} tracks from mood_tracks`);
-        return createApiResponse(true, moodTracks);
-      }
-    } catch (error) {
-      console.error('Exception fetching from mood_tracks:', error);
+    // Fetch tracks for the specific mood and user
+    console.log(`Fetching tracks for mood ${moodId} and user ${userId}`); // Use awaited moodId
+    const { data, error } = await supabase
+      .from('mood_tracks') // Corrected table name
+      .select('*')
+      .eq('user_mood_id', moodId) // Use awaited moodId
+      .eq('user_id', userId)
+      .order('added_at', { ascending: true });
+
+    if (error) {
+      console.error('Error fetching from mood_tracks:', error);
+    } else if (data && data.length > 0) {
+      console.log(`Retrieved ${data.length} tracks from mood_tracks`);
+      return createApiResponse(true, data);
     }
     
     // If no tracks found in mood_tracks, try the user_mood_tracks table
     try {
-      console.log(`Fetching tracks from user_mood_tracks for mood ${params.id}`);
-      const tracks = await getMoodTracks(userId, params.id);
+      console.log(`Fetching tracks from user_mood_tracks for mood ${moodId}`);
+      const tracks = await getMoodTracks(userId, moodId);
       console.log(`Retrieved ${tracks.length} tracks from user_mood_tracks`);
       
       return createApiResponse(true, tracks);

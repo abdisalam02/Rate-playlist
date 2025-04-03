@@ -79,7 +79,11 @@ function ActivityItem({ activity }: { activity: any }) {
               </p>
               
               {activity.item_artists && (
-                <p className="text-gray-400 text-sm truncate">{activity.item_artists}</p>
+                <p className="text-gray-400 text-sm truncate">
+                  {Array.isArray(activity.item_artists) 
+                    ? activity.item_artists.map((artist: { name: string }) => artist.name).join(', ') 
+                    : activity.item_artists}
+                </p>
               )}
               
               {activity.activity_type === 'rating' && (
@@ -107,17 +111,21 @@ function MediaCard({ item, type }: { item: any; type: 'track' | 'album' }) {
       whileHover={{ y: -4 }}
       transition={{ duration: 0.2 }}
     >
-      <Link href={`/${type}/${item.id}`}>
+      <Link href={`/${type}/${item.item_id}`}>
         <div className="aspect-square relative">
           <img
-            src={type === 'track' ? item.album?.images?.[0]?.url : item.images?.[0]?.url}
-            alt={item.name}
+            src={item.item_image || (type === 'track' ? '/placeholder-track.png' : '/placeholder-album.png')}
+            alt={item.item_name}
             className="w-full h-full object-cover"
+            onError={(e) => { 
+              e.currentTarget.src = (type === 'track' ? '/placeholder-track.png' : '/placeholder-album.png');
+              e.currentTarget.onerror = null; 
+            }}
           />
           <div className="absolute inset-0 bg-gradient-to-t from-black/70 to-transparent flex flex-col justify-end p-4">
-            <h3 className="font-medium text-lg line-clamp-1">{item.name}</h3>
+            <h3 className="font-medium text-lg line-clamp-1">{item.item_name}</h3>
             <p className="text-gray-300 line-clamp-1">
-              {item.artists?.map((artist: any) => artist.name).join(', ')}
+              {item.item_artists}
             </p>
             
             <div className="flex items-center mt-2">
@@ -191,8 +199,8 @@ export default function UserProfile() {
             name: rating.name || (rating.item_type === 'track' ? 'Unknown Track' : 'Unknown Album'),
             images: rating.item_type === 'album' ? [{ url: rating.image || '/placeholder-album.png' }] : undefined,
             album: rating.item_type === 'track' ? { images: [{ url: rating.image || '/placeholder-track.png' }] } : undefined,
-            artists: rating.artists ? [{ name: rating.artists }] : [{ name: 'Unknown Artist' }],
-            rating: rating.rating != null ? rating.rating * 2 : 0, // Convert 0-5 scale to 0-10
+            artists: rating.artists && Array.isArray(rating.artists) ? rating.artists : [{ name: rating.artists || 'Unknown Artist' }],
+            rating: rating.rating != null ? rating.rating : 0,
             item_type: rating.item_type
           }));
           
@@ -211,14 +219,14 @@ export default function UserProfile() {
         if (userData.top_tracks && Array.isArray(userData.top_tracks) && userData.top_tracks.length > 0) {
           setTopTracks(userData.top_tracks.map(track => ({
             ...track,
-            rating: track.rating != null ? track.rating * 2 : 0 // Convert 0-5 scale to 0-10
+            rating: track.rating != null ? track.rating : 0
           })));
         }
         
         if (userData.top_albums && Array.isArray(userData.top_albums) && userData.top_albums.length > 0) {
           setTopAlbums(userData.top_albums.map(album => ({
             ...album,
-            rating: album.rating != null ? album.rating * 2 : 0 // Convert 0-5 scale to 0-10
+            rating: album.rating != null ? album.rating : 0
           })));
         }
         
@@ -235,10 +243,10 @@ export default function UserProfile() {
             const activitiesData = await activitiesRes.json();
             
             if (activitiesData && activitiesData.activities && Array.isArray(activitiesData.activities)) {
-              // Convert ratings from 0-5 scale to 0-10 scale for display
+              // Keep rating on 0-5 scale
               const processedActivities = activitiesData.activities.map(activity => {
                 if (activity.activity_type === 'rating' && activity.rating != null) {
-                  return { ...activity, rating: activity.rating * 2 };
+                  return { ...activity, rating: activity.rating };
                 }
                 return activity;
               });
@@ -295,10 +303,10 @@ export default function UserProfile() {
               console.log('User ratings data:', ratingsData);
               
               if (ratingsData && ratingsData.ratings && Array.isArray(ratingsData.ratings) && ratingsData.ratings.length > 0) {
-                // Process ratings data to convert from 0-5 scale to 0-10
+                // Process ratings data - keep on 0-5 scale
                 const processedRatings = ratingsData.ratings.map(rating => ({
                   ...rating,
-                  rating: rating.rating != null ? rating.rating * 2 : 0 // Convert from 0-5 to 0-10 scale
+                  rating: rating.rating != null ? rating.rating : 0
                 }));
                 
                 // Process album ratings

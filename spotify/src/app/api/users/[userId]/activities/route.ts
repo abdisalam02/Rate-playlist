@@ -10,9 +10,11 @@ console.log(`[Activities Route] SUPABASE_ANON_KEY (global client check): ${proce
 
 export async function GET(
   request: NextRequest,
-  { params }: { params: { userId: string } }
+  { params }: { params: { userId?: string } }
 ) {
-  const userId = params.userId;
+  // Await params before accessing
+  const awaitedParams = await params;
+  const userId = awaitedParams?.userId;
   
   if (!userId) {
     return NextResponse.json(

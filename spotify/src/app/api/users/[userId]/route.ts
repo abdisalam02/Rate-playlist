@@ -127,17 +127,19 @@ async function enrichItems(
 
 export async function GET(
   request: NextRequest,
-  context
+  { params }: { params: { userId?: string } }
 ) {
   try {
-    const userId = context.params.userId;
+    // Await params before accessing
+    const awaitedParams = await params;
+    const userId = awaitedParams?.userId;
     
     if (!userId) {
       return NextResponse.json({ error: 'User ID is required' }, { status: 400 });
     }
     
     console.log('Fetching data for user ID:', userId);
-    
+
     // Get access token from session for Spotify API
     const session = await getServerSession(authOptions);
     let accessToken = session?.accessToken;
@@ -332,6 +334,9 @@ export async function GET(
       top_albums: enrichedAlbums,
       recent_ratings: enrichedRecent
     };
+    
+    // --- Log final data structure before sending --- 
+    console.log("Final API Data Structure:", JSON.stringify(responseData, null, 2));
     
     return NextResponse.json(responseData);
     
