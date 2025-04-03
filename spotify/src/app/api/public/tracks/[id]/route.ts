@@ -2,10 +2,10 @@ import { NextRequest, NextResponse } from 'next/server';
 
 export async function GET(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  context
 ) {
   try {
-    const trackId = params.id;
+    const trackId = context.params.id;
     
     if (!trackId) {
       return NextResponse.json({ error: 'Track ID is required' }, { status: 400 });

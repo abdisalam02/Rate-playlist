@@ -1,17 +1,18 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabase';
 import { cookies } from 'next/headers';
+import { createClient } from '@supabase/supabase-js';
 
 // GET /api/moods/[moodName]/tracks - Get tracks for a specific mood
 export async function GET(
   request: NextRequest,
-  { params }: { params: { moodName: string } }
+  context
 ) {
-  if (!params.moodName) {
+  if (!context.params.moodName) {
     return NextResponse.json({ error: 'Missing mood name parameter' }, { status: 400 });
   }
   
-  const decodedMoodName = decodeURIComponent(params.moodName);
+  const decodedMoodName = decodeURIComponent(context.params.moodName);
   const searchParams = request.nextUrl.searchParams;
   const limit = parseInt(searchParams.get('limit') || '20');
   

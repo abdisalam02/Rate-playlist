@@ -3,7 +3,7 @@ import { getServerSession } from 'next-auth/next';
 import { authOptions } from '@/lib/auth';
 import supabase from '@/utils/supabase';
 
-export async function POST(request: NextRequest, { params }: { params: { id: string } }) {
+export async function POST(request: NextRequest, context) {
   try {
     const session = await getServerSession(authOptions);
     
@@ -55,7 +55,7 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
     }
     
     const userId = userData.id;
-    const itemId = params.id;
+    const itemId = context.params.id;
     
     // Check if user has already rated this item
     const { data: existingRating, error: existingError } = await supabase
@@ -137,12 +137,16 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
   }
 }
 
-export async function GET(request: NextRequest, { params }: { params: { id: string } }) {
+export async function GET(request: NextRequest, context) {
   try {
     // Get the server session
     const session = await getServerSession(authOptions);
     
-    const itemId = params.id;
+    const itemId = context.params.id;
+    
+    if (!itemId) {
+      return NextResponse.json({ error: 'Rating ID is required' }, { status: 400 });
+    }
     
     // Get query parameters
     const { searchParams } = new URL(request.url);

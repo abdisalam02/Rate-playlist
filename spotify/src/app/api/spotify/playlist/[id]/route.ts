@@ -35,12 +35,11 @@ interface RouteContext {
 }
 
 // --- Main GET Handler ---
-export async function GET(request: NextRequest, context: RouteContext) {
+export async function GET(request: NextRequest, context) {
   console.log('[API Playlist] GET called');
 
   // Destructure id directly from the context object passed as the second argument
-  const { params } = context;
-  const id = params?.id;
+  const id = context.params?.id;
 
   // Check if ID is present
   if (!id) {

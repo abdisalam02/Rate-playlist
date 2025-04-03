@@ -127,22 +127,17 @@ async function enrichItems(
 
 export async function GET(
   request: NextRequest,
-  { params }: { params: { userId: string } }
+  context
 ) {
-  const awaitedParams = await params;
   try {
-    // Get the user ID from the route parameters
-    const userId = awaitedParams.userId;
+    const userId = context.params.userId;
+    
+    if (!userId) {
+      return NextResponse.json({ error: 'User ID is required' }, { status: 400 });
+    }
     
     console.log('Fetching data for user ID:', userId);
     
-    if (!userId) {
-      return NextResponse.json(
-        { error: 'User ID is required' },
-        { status: 400 }
-      );
-    }
-
     // Get access token from session for Spotify API
     const session = await getServerSession(authOptions);
     let accessToken = session?.accessToken;
