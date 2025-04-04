@@ -1,6 +1,6 @@
 {
-  "name": "Spotify Rating App",
-  "short_name": "SpotifyRating",
+  "name": "Musicboxd",
+  "short_name": "Musicboxd",
   "description": "Rate and discover music on Spotify",
   "start_url": "/",
   "display": "standalone",

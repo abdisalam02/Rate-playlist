@@ -385,29 +385,51 @@ export default function MoodPage() {
           ) : (
             <div className="bg-[#181818] rounded-lg overflow-hidden">
               {tracks.map((track, index) => (
-                <Link 
+                <div 
                   key={track.id || `track-${index}`}
-                  href={`/track/${track.id}`}
-                  className="flex items-center p-4 hover:bg-[#282828] border-b border-[#282828] last:border-b-0 transition-colors"
+                  className="relative border-b border-[#282828] last:border-b-0 hover:bg-[#282828] transition-colors p-4 flex items-center"
                 >
                   <div className="w-10 text-center text-gray-400 mr-4">{index + 1}</div>
-                  <div className="flex-shrink-0 w-12 h-12 mr-4">
+                  
+                  <Link 
+                    href={`/track/${track.id}`}
+                    className="flex-shrink-0 w-12 h-12 mr-4 relative group cursor-pointer"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                    }}
+                  >
                     <img 
                       src={track.album?.images?.[0]?.url || '/placeholder-track.png'} 
                       alt={track.name}
                       className="w-full h-full object-cover rounded"
                     />
-                  </div>
+                    <div className="absolute inset-0 bg-black bg-opacity-50 opacity-0 group-hover:opacity-100 rounded flex items-center justify-center transition-opacity">
+                      <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                      </svg>
+                    </div>
+                  </Link>
+                  
                   <div className="min-w-0 flex-1">
-                    <div className="font-medium truncate">{track.name}</div>
+                    <Link 
+                      href={`/track/${track.id}`}
+                      className="font-medium truncate block hover:underline"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                      }}
+                    >
+                      {track.name}
+                    </Link>
                     <div className="text-sm text-gray-400 truncate">
                       {track.artists?.map((artist: any) => artist.name).join(', ')}
                     </div>
                   </div>
+                  
                   <div className="text-sm text-gray-400 text-right ml-4 hidden md:block">
                     {formatDuration(track.duration_ms)}
                   </div>
-                </Link>
+                </div>
               ))}
             </div>
           )}

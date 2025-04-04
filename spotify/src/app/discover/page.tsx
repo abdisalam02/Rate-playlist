@@ -198,8 +198,8 @@ function SearchAlbumCard({ album }: { album: Album }) {
                     <p className="text-neutral-400 text-xs truncate" title={album.artists?.map(a => a.name).join(', ')}>
                 {releaseYear ? `${releaseYear} • ` : ''}{album.artists?.map(a => a.name).join(', ') || 'Various Artists'}
               </p>
-                </div>
-            </Link>
+        </div>
+      </Link>
         </div>
     );
 }
@@ -217,7 +217,7 @@ function SearchBar({ onSearchSubmit, initialQuery = '' }: SearchBarProps) {
         onSearchSubmit(query);
     };
 
-    return (
+          return (
         <form onSubmit={handleSearch} className="relative mb-8">
             <input
                 type="text"
@@ -241,8 +241,8 @@ function SearchBar({ onSearchSubmit, initialQuery = '' }: SearchBarProps) {
 // Loading spinner (can be reused)
 function SimpleLoadingSpinner({ message = 'Loading...' }: { message?: string }) {
   return (
-    <div className="w-full h-64 flex flex-col items-center justify-center text-neutral-400">
-      <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-[#1DB954] mb-4"></div>
+    <div className="w-full h-32 flex items-center justify-center text-neutral-400">
+      <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-[#1DB954] mr-3"></div>
       <p>{message}</p>
     </div>
   );
@@ -257,13 +257,10 @@ export default function Discover() {
     const [topTracks, setTopTracks] = useState<Track[]>([]);
     const [freshRap, setFreshRap] = useState<Track[]>([]);
     const [freshRnb, setFreshRnb] = useState<Track[]>([]);
-    const [loadingFeatured, setLoadingFeatured] = useState(true);
+    const [isLoading, setIsLoading] = useState(true);
     const [errorFeatured, setErrorFeatured] = useState<string | null>(null);
-    const [loadingTop, setLoadingTop] = useState(true);
     const [errorTop, setErrorTop] = useState<string | null>(null);
-    const [loadingRap, setLoadingRap] = useState(true);
     const [errorRap, setErrorRap] = useState<string | null>(null);
-    const [loadingRnb, setLoadingRnb] = useState(true);
     const [errorRnb, setErrorRnb] = useState<string | null>(null);
     
     // State for Search
@@ -276,7 +273,7 @@ export default function Discover() {
     useEffect(() => {
         const loadInitialData = async () => {
             console.log("Discover: Fetching initial data...");
-            setLoadingFeatured(true); setLoadingTop(true); setLoadingRap(true); setLoadingRnb(true);
+            setIsLoading(true);
             try {
                 const [featuredData, topData, rapData, rnbData] = await Promise.all([
                     fetchDeezerFeaturedPlaylist(),
@@ -296,8 +293,7 @@ export default function Discover() {
                 setErrorRap('Failed to load fresh rap.');
                 setErrorRnb('Failed to load fresh RnB.');
             } finally {
-                setLoadingFeatured(false); setLoadingTop(false); setLoadingRap(false); setLoadingRnb(false);
-                console.log("Discover: Initial data fetch complete.");
+                setIsLoading(false);
             }
         };
         // Only fetch if not searching
@@ -445,18 +441,18 @@ export default function Discover() {
                 <SearchBar onSearchSubmit={handleSearchSubmit} initialQuery={searchQuery} />
 
                 {/* Wrap content in Suspense */}
-                <Suspense fallback={<SimpleLoadingSpinner message="Loading discover content..." />}>
+                <Suspense fallback={<SimpleLoadingSpinner message="Loading..." />}>
                     {searchQuery ? (
                         renderSearchResults()
                     ) : (
                         // Check if initial loading is complete before rendering default sections
-                        loadingFeatured || loadingTop || loadingRap || loadingRnb ? (
-                            <SimpleLoadingSpinner message="Loading discover sections..." />
+                        isLoading ? (
+                            <SimpleLoadingSpinner message="Loading music..." />
                         ) : (
                             <>
-                                {renderTrackSection("Featured Playlist", featuredPlaylist, "/discover/featured-playlists", false, errorFeatured)}
+                                {renderTrackSection("Rap", featuredPlaylist, "/discover/featured-playlists", false, errorFeatured)}
                                 {renderTrackSection("Today's Top Tracks", topTracks, "/discover/current-hits", false, errorTop)}
-                                {renderTrackSection("Fresh Rap", freshRap, "/discover/fresh-rap", false, errorRap)}
+                                {renderTrackSection("Fresh Pop", freshRap, "/discover/fresh-rap", false, errorRap)}
                                 {renderTrackSection("Fresh RnB", freshRnb, "/discover/fresh-rnb", false, errorRnb)}
                             </>
                         )

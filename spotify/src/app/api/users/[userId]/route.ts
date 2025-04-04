@@ -186,7 +186,7 @@ export async function GET(
     
     let userProfileData;
       // Fetch user by primary ID first
-      const { data: userData, error: userError } = await supabase
+    const { data: userData, error: userError } = await supabase
       .from('users')
       .select('id, display_name, profile_image, spotify_id, created_at')
       .eq('id', userId)
@@ -215,7 +215,7 @@ export async function GET(
       userProfileData = userData;
        console.log('[User API Route] User found by primary ID:', userProfileData.id);
     }
-
+    
     // --- Fetch Stats (temporarily disabled RPC) ---
     let statsData: any = { ratings_count: 0, avg_rating: 0 };
     let fallbackRatingsCount: number = 0;
@@ -270,7 +270,7 @@ export async function GET(
       .order('rating', { ascending: false })
       .order('created_at', { ascending: false })
       .limit(limit); 
-      
+    
     // --- Fetch Recent Ratings (Keep limit at 5 or adjust as needed) ---
      const recentLimit = 5;
      console.log(`[User API Route] Fetching ${recentLimit} recent ratings for user: ${userProfileData.id}`);
@@ -294,7 +294,7 @@ export async function GET(
         mapDeezerIdsToSpotify(recentRatingsRaw)
     ]);
     console.log('[User API Route] ID Mapping complete.');
-
+    
     // --- Prepare items for enrichment by setting item_id correctly --- 
     const prepareForEnrichment = (items: any[]) => {
         return items.map(item => {
@@ -321,7 +321,7 @@ export async function GET(
     // --- Construct the final API response --- 
     const responseData = {
       profile: {
-          ...userProfileData,
+        ...userProfileData,
           bio: null,
           ratings_count: statsData.ratings_count,
       },
@@ -329,10 +329,10 @@ export async function GET(
       top_albums: enrichedTopAlbums,
       recent_ratings: enrichedRecentRatings
     };
-
+    
     console.log('[User API Route] Final API Data Structure ready to send.');
     return NextResponse.json(responseData);
-
+    
   } catch (error: any) {
     console.error('[User API Route] Error in GET handler:', error);
     return NextResponse.json({ error: error.message || 'Internal Server Error' }, { status: 500 });

@@ -30,7 +30,7 @@ async function getTopAlbums(limit = 50) {
 function AlbumCard({ album }: { album: Album & { average_rating?: number; rating_count?: number } }) {
   const imageUrl = album.images?.[0]?.url || '/placeholder.png';
   const releaseYear = album.release_date ? new Date(album.release_date).getFullYear() : null;
-
+  
   return (
     <div className="bg-[#181818] hover:bg-[#282828] transition rounded-lg overflow-hidden h-full flex flex-col relative group">
       <Link href={`/album/${album.id}`} className="block p-3 flex flex-col h-full">
@@ -72,7 +72,7 @@ const StarIcon = (props: React.SVGProps<SVGSVGElement>) => (
 
 export default async function TopCommunityAlbumsPage() {
   const topAlbums = await getTopAlbums();
-
+  
   return (
     <div className="bg-gradient-to-b from-[#1f1f1f] to-[#121212] min-h-screen text-white">
       <TokenRefresher /> 

@@ -6,11 +6,71 @@ import { useSession, signIn, signOut } from 'next-auth/react';
 import { motion, AnimatePresence } from 'framer-motion';
 import Image from 'next/image';
 
+// Icons for navigation
+function HomeIcon() {
+  return (
+    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"></path>
+    </svg>
+  );
+}
+
+function DiscoverIcon() {
+  return (
+    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path>
+    </svg>
+  );
+}
+
+function CommunityIcon() {
+  return (
+    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"></path>
+    </svg>
+  );
+}
+
+function ActivityIcon() {
+  return (
+    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M13 10V3L4 14h7v7l9-11h-7z"></path>
+    </svg>
+  );
+}
+
+function MoodIcon() {
+  return (
+    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zm12-3c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zM9 10l12-3"></path>
+    </svg>
+  );
+}
+
 export default function Navbar() {
   const { data: session, status } = useSession();
   const [isScrolled, setIsScrolled] = useState(false);
   const [userImage, setUserImage] = useState('/default-avatar.png');
   const [userName, setUserName] = useState('');
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [profileMenuOpen, setProfileMenuOpen] = useState(false);
+  const mobileMenuRef = useRef<HTMLDivElement>(null);
+  const profileMenuRef = useRef<HTMLDivElement>(null);
+  
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (mobileMenuRef.current && !mobileMenuRef.current.contains(event.target as Node)) {
+        setMobileMenuOpen(false);
+      }
+      if (profileMenuRef.current && !profileMenuRef.current.contains(event.target as Node)) {
+        setProfileMenuOpen(false);
+      }
+    }
+    
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
   
   useEffect(() => {
     const handleScroll = () => {
@@ -34,6 +94,11 @@ export default function Navbar() {
     }
   }, [session]);
 
+  const closeDropdowns = () => {
+    setMobileMenuOpen(false);
+    setProfileMenuOpen(false);
+  };
+
   return (
     <header className={`fixed top-0 z-50 w-full transition-all duration-300 ${isScrolled ? 'bg-[#121212]/95 backdrop-blur-sm shadow-md' : 'bg-transparent'} text-white`}>
       <div className="container mx-auto px-4">
@@ -46,20 +111,25 @@ export default function Navbar() {
             
             {/* Desktop Navigation Links - Removed Playlists */}
             <nav className="hidden md:flex items-center gap-6 text-sm text-neutral-300">
-              <Link href="/" className="hover:text-white transition-colors">
-                Home
+              <Link href="/" className="flex items-center gap-1.5 hover:text-white transition-colors">
+                <HomeIcon />
+                <span>Home</span>
               </Link>
-              <Link href="/discover" className="hover:text-white transition-colors">
-                Discover
+              <Link href="/discover" className="flex items-center gap-1.5 hover:text-white transition-colors">
+                <DiscoverIcon />
+                <span>Discover</span>
               </Link>
-              <Link href="/community" className="hover:text-white transition-colors">
-                Community
+              <Link href="/community" className="flex items-center gap-1.5 hover:text-white transition-colors">
+                <CommunityIcon />
+                <span>Community</span>
               </Link>
-              <Link href="/community/activity" className="hover:text-white transition-colors">
-                Activity
+              <Link href="/community/activity" className="flex items-center gap-1.5 hover:text-white transition-colors">
+                <ActivityIcon />
+                <span>Activity</span>
               </Link>
-              <Link href="/moods/staple" className="hover:text-white transition-colors">
-                Moods
+              <Link href="/moods/staple" className="flex items-center gap-1.5 hover:text-white transition-colors">
+                <MoodIcon />
+                <span>Moods</span>
               </Link>
             </nav>
           </div>
@@ -69,8 +139,11 @@ export default function Navbar() {
             {status === "loading" ? (
               <div className="w-8 h-8 rounded-full bg-neutral-700 animate-pulse"></div>
             ) : session ? (
-              <div className="dropdown dropdown-end">
-                <div tabIndex={0} role="button" className="flex items-center gap-2 cursor-pointer p-1 rounded-full hover:bg-neutral-800 transition-colors">
+              <div className="relative" ref={profileMenuRef}>
+                <div 
+                  onClick={() => setProfileMenuOpen(!profileMenuOpen)}
+                  className="flex items-center gap-2 cursor-pointer p-1 rounded-full hover:bg-neutral-800 transition-colors"
+                >
                   <div className="relative w-8 h-8 rounded-full overflow-hidden bg-neutral-700">
                     <Image 
                       src={userImage}
@@ -86,23 +159,31 @@ export default function Navbar() {
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
                   </svg>
                 </div>
-                <ul tabIndex={0} className="dropdown-content z-[1] menu p-2 shadow bg-[#181818] rounded-box w-52 mt-2 border border-neutral-700 text-sm">
-                  <li>
-                    <Link href="/profile" className="hover:bg-neutral-700 rounded">Profile</Link>
-                  </li>
-                  <li>
-                    <Link href="/search" className="hover:bg-neutral-700 rounded">Search</Link>
-                  </li>
-                  <div className="divider my-1 h-px bg-neutral-700"></div>
-                  <li>
-                    <button 
-                      onClick={() => signOut()}
-                      className="text-sm text-red-400 hover:bg-neutral-700 rounded w-full text-left"
-                    >
-                      Sign Out
-                    </button>
-                  </li>
-                </ul>
+                {profileMenuOpen && (
+                  <ul className="absolute right-0 z-[1] menu p-2 shadow bg-[#181818] rounded-lg w-52 mt-2 border border-neutral-700 text-sm">
+                    <li>
+                      <Link 
+                        href="/profile" 
+                        className="hover:bg-neutral-700 rounded py-2 px-4 block" 
+                        onClick={closeDropdowns}
+                      >
+                        Profile
+                      </Link>
+                    </li>
+                    <div className="divider my-1 h-px bg-neutral-700"></div>
+                    <li>
+                      <button 
+                        onClick={() => {
+                          closeDropdowns();
+                          signOut();
+                        }}
+                        className="text-sm text-red-400 hover:bg-neutral-700 rounded w-full text-left py-2 px-4 block"
+                      >
+                        Sign Out
+                      </button>
+                    </li>
+                  </ul>
+                )}
               </div>
             ) : (
               <button 
@@ -116,48 +197,112 @@ export default function Navbar() {
               </button>
             )}
             
-            {/* Mobile dropdown menu using DaisyUI - Removed extra profile info & Playlists */}
-            <div className="dropdown dropdown-end md:hidden">
-              <div tabIndex={0} role="button" className="btn btn-ghost btn-circle hover:bg-neutral-800">
+            {/* Mobile dropdown menu - improved version */}
+            <div className="relative md:hidden" ref={mobileMenuRef}>
+              <button 
+                onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+                className="btn btn-ghost btn-circle hover:bg-neutral-800"
+              >
                 <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 6h16M4 12h16M4 18h7" />
                 </svg>
-              </div>
-              <ul tabIndex={0} className="dropdown-content z-[1] menu p-2 shadow bg-[#181818] rounded-box w-52 mt-2 border border-neutral-700 text-sm">
-                <li><Link href="/" className="hover:bg-neutral-700 rounded">Home</Link></li>
-                <li><Link href="/discover" className="hover:bg-neutral-700 rounded">Discover</Link></li>
-                <li><Link href="/community" className="hover:bg-neutral-700 rounded">Community</Link></li>
-                <li><Link href="/community/activity" className="hover:bg-neutral-700 rounded">Activity</Link></li>
-                <li><Link href="/moods/staple" className="hover:bg-neutral-700 rounded">Moods</Link></li>
-                
-                {session ? (
-                  <>
-                    <div className="divider my-1 h-px bg-neutral-700"></div>
-                    <li><Link href="/profile" className="hover:bg-neutral-700 rounded">Profile</Link></li>
-                    <li><Link href="/search" className="hover:bg-neutral-700 rounded">Search</Link></li>
-                    <li>
-                      <button 
-                        onClick={() => signOut()}
-                        className="text-sm text-red-400 hover:bg-neutral-700 rounded w-full text-left"
-                      >
-                        Sign Out
-                      </button>
-                    </li>
-                  </>
-                ) : (
-                  <>
-                    <div className="divider my-1 h-px bg-neutral-700"></div>
-                    <li>
-                       <button 
-                         onClick={() => signIn("spotify")} 
-                         className="bg-[#1DB954] text-black hover:bg-opacity-80 rounded font-medium w-full text-center py-1.5"
+              </button>
+              
+              {mobileMenuOpen && (
+                <ul className="absolute right-0 z-[1] shadow bg-[#181818] rounded-lg w-60 mt-2 border border-neutral-700 text-base overflow-hidden">
+                  <li>
+                    <Link 
+                      href="/" 
+                      className="block py-3 px-5 hover:bg-neutral-700 active:bg-neutral-600 transition-colors flex items-center gap-3" 
+                      onClick={closeDropdowns}
+                    >
+                      <HomeIcon />
+                      Home
+                    </Link>
+                  </li>
+                  <li>
+                    <Link 
+                      href="/discover" 
+                      className="block py-3 px-5 hover:bg-neutral-700 active:bg-neutral-600 transition-colors flex items-center gap-3" 
+                      onClick={closeDropdowns}
+                    >
+                      <DiscoverIcon />
+                      Discover
+                    </Link>
+                  </li>
+                  <li>
+                    <Link 
+                      href="/community" 
+                      className="block py-3 px-5 hover:bg-neutral-700 active:bg-neutral-600 transition-colors flex items-center gap-3" 
+                      onClick={closeDropdowns}
+                    >
+                      <CommunityIcon />
+                      Community
+                    </Link>
+                  </li>
+                  <li>
+                    <Link 
+                      href="/community/activity" 
+                      className="block py-3 px-5 hover:bg-neutral-700 active:bg-neutral-600 transition-colors flex items-center gap-3" 
+                      onClick={closeDropdowns}
+                    >
+                      <ActivityIcon />
+                      Activity
+                    </Link>
+                  </li>
+                  <li>
+                    <Link 
+                      href="/moods/staple" 
+                      className="block py-3 px-5 hover:bg-neutral-700 active:bg-neutral-600 transition-colors flex items-center gap-3" 
+                      onClick={closeDropdowns}
+                    >
+                      <MoodIcon />
+                      Moods
+                    </Link>
+                  </li>
+                  
+                  {session ? (
+                    <>
+                      <div className="h-px bg-neutral-700 my-1"></div>
+                      <li>
+                        <Link 
+                          href="/profile" 
+                          className="block py-3 px-5 hover:bg-neutral-700 active:bg-neutral-600 transition-colors" 
+                          onClick={closeDropdowns}
                         >
-                          Sign In
-                       </button>
-                    </li>
-                  </>
-                )}
-              </ul>
+                          Profile
+                        </Link>
+                      </li>
+                      <li>
+                        <button 
+                          onClick={() => {
+                            closeDropdowns();
+                            signOut();
+                          }}
+                          className="block py-3 px-5 w-full text-left text-red-400 hover:bg-neutral-700 active:bg-neutral-600 transition-colors"
+                        >
+                          Sign Out
+                        </button>
+                      </li>
+                    </>
+                  ) : (
+                    <>
+                      <div className="h-px bg-neutral-700 my-1"></div>
+                      <li className="p-3">
+                         <button 
+                           onClick={() => {
+                             closeDropdowns();
+                             signIn("spotify");
+                           }}
+                           className="bg-[#1DB954] text-black hover:bg-opacity-80 rounded-full font-medium w-full text-center py-2.5 px-4"
+                         >
+                           Sign In
+                         </button>
+                      </li>
+                    </>
+                  )}
+                </ul>
+              )}
             </div>
           </div>
         </div>

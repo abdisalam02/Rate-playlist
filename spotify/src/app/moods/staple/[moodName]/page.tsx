@@ -112,20 +112,36 @@ function UserTrackContribution({ track }: { track: UserTrack }) {
       )}
       
       <div className="flex items-start gap-4">
-        <div className="relative w-20 h-20 shrink-0 rounded overflow-hidden">
+        <Link 
+          href={`/track/${track.track_id}`}
+          className="relative w-20 h-20 shrink-0 rounded overflow-hidden block group"
+          onClick={(e) => e.stopPropagation()}
+        >
           <Image
             src={track.track_image || '/placeholder-track.png'}
             alt={track.track_name}
             fill
-            className="object-cover"
+            className="object-cover transition-transform duration-300 group-hover:scale-110"
             sizes="80px"
             unoptimized={track.track_image?.includes('i.scdn.co')}
           />
-        </div>
+          <div className="absolute inset-0 bg-black bg-opacity-40 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity">
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+          </div>
+        </Link>
         
         <div className="flex-1 min-w-0">
-          <h4 className="font-semibold text-white text-lg">{track.track_name}</h4>
-          <p className="text-neutral-400">{track.artist_name}</p>
+          <Link 
+            href={`/track/${track.track_id}`}
+            className="block" 
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h4 className="font-semibold text-white text-lg hover:text-[#1DB954] transition-colors">{track.track_name}</h4>
+            <p className="text-neutral-400">{track.artist_name}</p>
+          </Link>
           
           <Link 
             href={`https://open.spotify.com/track/${track.track_id}`}

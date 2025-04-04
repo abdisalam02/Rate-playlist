@@ -15,7 +15,7 @@ export default function FreshRapPage() {
   const [error, setError] = useState<string | null>(null);
   // Use the correct Playlist ID for Fresh Rap
   const PLAYLIST_ID = '2228601362'; 
-  const PLAYLIST_NAME = "Fresh Rap";
+  const PLAYLIST_NAME = "Fresh Pop";
 
   useEffect(() => {
     const fetchTracks = async () => {

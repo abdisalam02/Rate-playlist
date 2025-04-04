@@ -12,7 +12,7 @@ export default function FeaturedPlaylistsPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const PLAYLIST_ID = '6682665064';
-  const PLAYLIST_NAME = "Fresh Pop Mix";
+  const PLAYLIST_NAME = "Fresh Rap Mix";
 
   useEffect(() => {
     const fetchTracks = async () => {
