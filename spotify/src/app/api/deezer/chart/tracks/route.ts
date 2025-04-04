@@ -1,232 +1,77 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { fetchSpotifyApi } from '../../../../lib/spotify'; // Correct relative path (4 levels up)
 
-// Set to dynamic to ensure data is always fresh
+// Define basic types locally 
+interface Artist { name: string; id?: number; }
+interface Album { title?: string; id?: number; cover_medium?: string; }
+interface DeezerChartTrack {
+  id: number | string; // Use string as well for consistency
+  title: string;
+  title_short?: string;
+  duration?: number; // Make optional as it might be missing
+  preview?: string | null; // Allow null
+  explicit_lyrics?: boolean;
+  artist?: Artist; // Make optional
+  album?: Album; // Make optional
+}
+
+// Set caching behavior
 export const dynamic = 'force-dynamic';
 export const fetchCache = 'force-no-store';
 export const revalidate = 0;
 
-// Define local types matching src/types.d.ts for safety
-interface Image {
-  url: string;
-  height?: number;
-  width?: number;
-}
-interface Artist {
-  id: string;
-  name: string;
-  images?: Image[];
-}
-interface Album {
-  id: string;
-  name: string;
-  images?: Image[];
-  release_date?: string;
-}
-interface Track {
-  id: string;
-  name: string;
-  artists?: Artist[];
-  album?: Album;
-  preview_url?: string | null;
-  duration_ms?: number;
-  explicit?: boolean;
-}
-
-// Define expected structure from Deezer Chart API
-interface DeezerTrack {
-  id: number; // Deezer ID
-  title: string;
-  link: string;
-  duration: number;
-  rank: number;
-  explicit_lyrics: boolean;
-  preview: string;
-  artist: {
-    id: number;
-    name: string;
-    link: string;
-    picture: string;
-    picture_small: string;
-    picture_medium: string;
-    picture_big: string;
-    picture_xl: string;
-  };
-  album: {
-    id: number;
-    title: string;
-    cover: string;
-    cover_small: string;
-    cover_medium: string;
-    cover_big: string;
-    cover_xl: string;
-  };
-  id_spotify?: string; // Optional Spotify ID
-}
-
-interface DeezerChartResponse {
-  data: DeezerTrack[];
-  total: number;
-}
-
-// --- Helper Function for Spotify Client Credentials (Duplicate - refactor later) ---
-const getClientCredentialsToken = async (): Promise<string | null> => { 
-  console.warn("[API Deezer Chart] Using placeholder getClientCredentialsToken for Spotify search"); 
-  const clientId = process.env.SPOTIFY_CLIENT_ID;
-  const clientSecret = process.env.SPOTIFY_CLIENT_SECRET;
-  if (!clientId || !clientSecret) {
-    console.error("[API Deezer Chart] Missing Spotify client ID or secret for search.");
-    return null;
-  }
-  try {
-    const response = await fetch('https://accounts.spotify.com/api/token', { 
-      method: 'POST', 
-      headers: {
-        'Content-Type': 'application/x-www-form-urlencoded',
-        'Authorization': `Basic ${Buffer.from(`${clientId}:${clientSecret}`).toString('base64')}`
-      }, 
-      body: new URLSearchParams({ grant_type: 'client_credentials' }), 
-      cache: 'no-store'
-    });
-    if (!response.ok) { 
-        console.error(`[API Deezer Chart] Failed to get Spotify token: ${response.status}`); 
-        return null; 
-    }
-    const data = await response.json();
-    console.log("[API Deezer Chart] Got Spotify token for search.");
-    return data.access_token;
-  } catch (error) { 
-      console.error("[API Deezer Chart] Error fetching Spotify token:", error); 
-      return null; 
-  }
-};
-
-// Define type for Spotify Search result item we care about
-interface SpotifySearchResultItem {
-  id: string;
-  preview_url?: string | null; // Make optional here to match potential undefined
-  duration_ms?: number;      // Make optional here
-}
-
-// Define type for the result of the mapping within Promise.all
-interface SpotifyIdMappingResult {
-  deezerId: string;
-  spotifyData: {
-    spotifyId: string;
-    preview_url?: string | null; // Allow undefined
-    duration_ms?: number;      // Allow undefined
-  };
-}
-
-export async function GET(request: NextRequest) {
-  console.log('[API Deezer Chart] GET called');
-  const deezerChartUrl = 'https://api.deezer.com/chart/0/tracks';
-  const limitParam = request.nextUrl.searchParams.get('limit');
-  const limit = limitParam ? parseInt(limitParam, 10) : 20; 
-
-  try {
-    // 1. Fetch from Deezer
-    console.log(`[API Deezer Chart] Fetching from ${deezerChartUrl}`);
-    const deezerResponse = await fetch(deezerChartUrl, { method: 'GET', cache: 'no-store' });
-    if (!deezerResponse.ok) { 
-        const errorText = await deezerResponse.text();
-        console.error(`[API Deezer Chart] Deezer API request failed: ${deezerResponse.status} ${deezerResponse.statusText}, Body: ${errorText}`);
-        return NextResponse.json({ error: `Failed Deezer chart request: ${deezerResponse.statusText}` }, { status: deezerResponse.status }); 
-    }
-
-    const deezerData: DeezerChartResponse = await deezerResponse.json();
-    console.log(`[API Deezer Chart] Received ${deezerData?.data?.length} tracks from Deezer.`);
-    if (!deezerData?.data?.length) { return NextResponse.json({ tracks: [] }); }
-
-    // 2. Initial Transform (Deezer -> Track format)
-    const initialTracks: Track[] = deezerData.data.slice(0, limit).map((dTrack: DeezerTrack): Track => {
-      const trackId = dTrack.id_spotify || `deezer-${dTrack.id}`;
-      const imageUrl = dTrack.album?.cover_xl || dTrack.album?.cover_big || dTrack.album?.cover_medium || dTrack.album?.cover_small || dTrack.album?.cover || '/placeholder-album.png';
-      return {
-        id: trackId,
-        name: dTrack.title,
-        artists: [{ id: `deezer-artist-${dTrack.artist.id}`, name: dTrack.artist.name }],
-        album: { id: `deezer-album-${dTrack.album.id}`, name: dTrack.album.title, images: [{ url: imageUrl, height: 500, width: 500 }] }, // Use defined Image type
-        preview_url: dTrack.preview, 
-        duration_ms: dTrack.duration * 1000, 
-        explicit: dTrack.explicit_lyrics,
-      };
-    });
-
-    // 3. Identify tracks needing Spotify ID lookup
-    const tracksToLookup = initialTracks.filter(track => track.id.startsWith('deezer-'));
-    let spotifyIdMap = new Map<string, SpotifyIdMappingResult['spotifyData']>(); // Use refined type
-
-    // 4. Spotify Search (if needed)
-    if (tracksToLookup.length > 0) {
-      console.log(`[API Deezer Chart] Found ${tracksToLookup.length} tracks needing Spotify ID lookup.`);
-      const spotifyToken = await getClientCredentialsToken(); 
-      if (spotifyToken) {
-        // Specify the return type of the async map function
-        const searchPromises = tracksToLookup.map(async (track): Promise<SpotifyIdMappingResult | null> => {
-          const trackName = track.name;
-          const artistName = track.artists?.[0]?.name; 
-          if (!trackName || !artistName) return null;
-
-          const searchQuery = encodeURIComponent(`track:"${trackName}" artist:"${artistName}"`);
-          const searchEndpoint = `/search?q=${searchQuery}&type=track&limit=1`;
-
-          try {
-            const searchResults: any = await fetchSpotifyApi(searchEndpoint, spotifyToken);
-            const foundSpotifyTrack: SpotifySearchResultItem | undefined = searchResults?.tracks?.items?.[0];
-            
-            if (foundSpotifyTrack?.id) {
-              // Return the defined mapping result type
-              return { 
-                deezerId: track.id, 
-                spotifyData: {
-                   spotifyId: foundSpotifyTrack.id, 
-                   preview_url: foundSpotifyTrack.preview_url, // Can be string | null | undefined
-                   duration_ms: foundSpotifyTrack.duration_ms  // Can be number | undefined
-                }
-              };
-            }
-          } catch (searchError) {
-            console.error(`[API Deezer Chart] Spotify search failed for ${trackName}:`, searchError);
-          }
-          return null; // Indicate search failed or no match
-        });
-
-        const searchResults = await Promise.all(searchPromises);
+// Helper function to fetch chart tracks from Deezer API
+async function fetchDeezerChartTracksFromAPI(limit: number = 50): Promise<DeezerChartTrack[]> {
+    const url = `https://api.deezer.com/chart/0/tracks?limit=${limit}`;
+    console.log(`[API Deezer Chart - Simplified] Fetching from ${url}`);
+    try {
+        const response = await fetch(url, { cache: 'no-store' });
+        if (!response.ok) {
+            console.error(`[API Deezer Chart - Simplified] Deezer API error: ${response.status} ${response.statusText}`);
+            const errorBody = await response.text();
+            console.error(`[API Deezer Chart - Simplified] Deezer error body: ${errorBody}`);
+            throw new Error(`Failed to fetch Deezer chart tracks: ${response.statusText}`);
+        }
+        const data = await response.json();
+        console.log(`[API Deezer Chart - Simplified] Received response structure from Deezer:`, Object.keys(data));
         
-        // Filter using the defined result type
-        const validResults = searchResults.filter(
-            (result): result is SpotifyIdMappingResult => result !== null
-        );
-        spotifyIdMap = new Map(validResults.map(result => [result.deezerId, result.spotifyData]));
+        // Expect tracks usually in the 'data' property of the root object
+        const tracks = data?.data;
+         if (!Array.isArray(tracks)) {
+             console.error(`[API Deezer Chart - Simplified] Unexpected data structure from Deezer. Expected 'data' array. Received:`, data);
+             return []; // Return empty if structure is wrong
+         }
+        console.log(`[API Deezer Chart - Simplified] Received ${tracks.length} tracks from Deezer chart.`);
+        return tracks as DeezerChartTrack[];
+    } catch (error) {
+        console.error(`[API Deezer Chart - Simplified] Error fetching Deezer chart tracks:`, error);
+        return []; // Return empty array on error
+    }
+}
 
-        console.log(`[API Deezer Chart] Successfully mapped ${spotifyIdMap.size} tracks to Spotify IDs.`);
-      } else {
-        console.warn('[API Deezer Chart] Could not get Spotify token for search, skipping ID lookup.');
-      }
+/**
+ * GET handler for /api/deezer/chart/tracks
+ * Fetches tracks from the global Deezer chart.
+ */
+export async function GET(request: NextRequest) {
+    const searchParams = request.nextUrl.searchParams;
+    const limitParam = searchParams.get('limit');
+    const limit = limitParam ? parseInt(limitParam, 10) : 50;
+    if (isNaN(limit) || limit <= 0) {
+        return NextResponse.json({ error: 'Invalid limit parameter' }, { status: 400 });
     }
 
-    // 5. Final ID Update
-    const finalTracks: Track[] = initialTracks.map(track => {
-      if (track.id.startsWith('deezer-') && spotifyIdMap.has(track.id)) {
-        const spotifyData = spotifyIdMap.get(track.id)!;
-        console.log(`[API Deezer Chart] Updating ID for ${track.name} from ${track.id} to ${spotifyData.spotifyId}`);
-        return {
-          ...track,
-          id: spotifyData.spotifyId, // Update the ID!
-          preview_url: spotifyData.preview_url ?? track.preview_url, // Update if available
-          duration_ms: spotifyData.duration_ms ?? track.duration_ms, // Update if available
-        };
-      }
-      return track; // Return original track if no update needed
-    });
+    console.log(`[API Deezer Chart - Simplified] GET called, Limit: ${limit}`);
 
-    // 6. Return Enhanced List
-    console.log(`[API Deezer Chart] Returning ${finalTracks.length} final tracks.`);
-    return NextResponse.json({ tracks: finalTracks });
+    try {
+        // Fetch raw Deezer chart tracks
+        const deezerTracks: DeezerChartTrack[] = await fetchDeezerChartTracksFromAPI(limit);
+        
+        // Return the raw Deezer tracks, nested as expected by the Home page (page.tsx)
+        console.log(`[API Deezer Chart - Simplified] Returning ${deezerTracks.length} raw Deezer chart tracks.`);
+        return NextResponse.json({ tracks: { data: deezerTracks } }); 
 
-  } catch (error: any) {
-    console.error('[API Deezer Chart] Internal Server Error:', error);
-    return NextResponse.json({ error: 'Internal Server Error processing Deezer chart request', details: error.message }, { status: 500 });
-  }
-} 
+    } catch (error) {
+        console.error(`[API Deezer Chart - Simplified] Final catch block error:`, error);
+        return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
+    }
+}

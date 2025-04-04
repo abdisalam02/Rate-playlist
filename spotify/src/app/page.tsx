@@ -5,7 +5,7 @@ import { useSession } from 'next-auth/react';
 import Link from 'next/link';
 import Image from 'next/image';
 import { useRouter } from 'next/navigation';
-import { motion, useScroll, useTransform } from 'framer-motion';
+import { motion, useScroll, useTransform, AnimatePresence } from 'framer-motion';
 import { useInView } from 'react-intersection-observer';
 import Navbar from '@/app/components/Navbar';
 import { toast } from 'react-hot-toast';
@@ -592,7 +592,29 @@ function getMockTracks(): Track[] {
   return [ { id: 'mock-track-1', name: 'Summertime Vibes', artists: [{ id: 'artist-1', name: 'DJ Sunshine' }], album: { id: 'album-1', name: 'Summer Hits', images: [{ url: '/placeholder-track.png', height: 300, width: 300 }] }, average_rating: 4.5, rating_count: 120 }, /* ... more tracks ... */ { id: 'mock-track-12', name: 'Floppy Disk', artists: [{ id: 'artist-12', name: 'Save Icon' }], album: { id: 'album-12', name: 'Storage Media', images: [{ url: '/placeholder-track.png', height: 300, width: 300 }] }, average_rating: 4.0, rating_count: 88 } ];
 }
 
-// Main component
+// --- Define Carousel Data ---
+const carouselItems = [
+  {
+    title: "Discover",
+    description: "Explore brand new releases and trending music from around the globe.",
+    image: "/img/carousel-discover.jpg", // Placeholder - replace with actual image
+    link: "/discover"
+  },
+  {
+    title: "Community",
+    description: "Connect with fellow music lovers, share ratings, and find new sounds.",
+    image: "/img/carousel-community.jpg", // Placeholder
+    link: "/community"
+  },
+  {
+    title: "Activity Feed",
+    description: "See what your friends and the community are listening to and rating.",
+    image: "/img/carousel-activity.jpg", // Placeholder
+    link: "/community/activity"
+  }
+];
+
+// --- Main component ---
 export default function Home() {
   const router = useRouter();
   const { data: session, status } = useSession();
@@ -606,6 +628,7 @@ export default function Home() {
   const [bangersLoading, setBangersLoading] = useState(true);
   const [newReleases, setNewReleases] = useState<Album[]>([]);
   const [newReleasesLoading, setNewReleasesLoading] = useState(true);
+  const [activeIndex, setActiveIndex] = useState(0); // State for carousel
   
   // Animation
   const { scrollY } = useScroll();
@@ -625,28 +648,43 @@ export default function Home() {
   // Update useEffect to fetch Deezer Top Chart
   useEffect(() => {
     const fetchTopChartData = async () => {
-      setTopChartLoading(true); // Use the renamed loading state
+      setTopChartLoading(true); 
       console.log('[Home Page] Fetching Deezer Top Chart data...');
       try {
-        // Fetch from the new Deezer chart endpoint
         const response = await fetchWithClientFallback(
-          getApiUrl('/api/deezer/chart/tracks'), // Use Deezer route
-          session // Pass session if needed by fetchWithClientFallback
+          getApiUrl('/api/deezer/chart/tracks'), 
+          session 
         );
 
-        console.log('[Home Page] Deezer Chart API response status:', response?.status);
-        if (response && response.tracks && Array.isArray(response.tracks)) {
-          console.log(`[Home Page] Successfully received ${response.tracks.length} tracks from Deezer Chart API.`);
-          setTopChartTracks(response.tracks); // Update the renamed state
+        console.log('[Home Page] Deezer Chart API response structure:', response ? Object.keys(response) : 'null response'); // Log structure
+        // *** Access the nested data array ***
+        const tracksData = response?.tracks?.data;
+
+        if (tracksData && Array.isArray(tracksData)) {
+          console.log(`[Home Page] Successfully received ${tracksData.length} tracks from Deezer Chart API.`);
+          // Map the Deezer structure to the expected Track structure
+          const formattedTracks = tracksData.map((item: any): Track => ({
+            id: item.id?.toString() ?? Math.random().toString(),
+            name: item.title ?? 'Unknown Track',
+            artists: item.artist ? [{ id: item.artist.id?.toString(), name: item.artist.name }] : [],
+            album: {
+                id: item.album?.id?.toString(),
+                name: item.album?.title,
+                images: item.album?.cover_medium ? [{ url: item.album.cover_medium, height: 300, width: 300 }] : [],
+            },
+            duration_ms: item.duration ? item.duration * 1000 : undefined,
+            preview_url: item.preview || null,
+          }));
+          setTopChartTracks(formattedTracks); 
         } else {
-          console.warn('[Home Page] Deezer Chart API did not return expected { tracks: [] } format. Setting empty.', response);
-          setTopChartTracks([]); // Update the renamed state
+          console.warn('[Home Page] Deezer Chart API did not return expected { tracks: { data: [...] } } format. Setting empty.', response);
+          setTopChartTracks([]); 
         }
       } catch (error) {
         console.error('[Home Page] Error fetching Deezer chart data:', error);
-        setTopChartTracks([]); // Update the renamed state
+        setTopChartTracks([]); 
       } finally {
-        setTopChartLoading(false); // Update the renamed loading state
+        setTopChartLoading(false); 
       }
     };
     fetchTopChartData();
@@ -660,15 +698,31 @@ export default function Home() {
       const playlistId = '1282495565'; // Deezer Radar Weekly ID
       try {
         const response = await fetchWithClientFallback(
-          getApiUrl(`/api/deezer/playlist/${playlistId}?limit=6`), // Fetch 6 tracks
+          getApiUrl(`/api/deezer/playlist/${playlistId}?limit=6`), 
             session
           );
-        console.log(`[Home Page] Radar Weekly (${playlistId}) API response status:`, response?.status);
-        if (response && response.tracks && Array.isArray(response.tracks)) {
-          console.log(`[Home Page] Successfully received ${response.tracks.length} tracks from Radar Weekly.`);
-          setRadarWeeklyTracks(response.tracks);
+        console.log(`[Home Page] Radar Weekly (${playlistId}) API response structure:`, response ? Object.keys(response) : 'null response'); // Log structure
+        // *** Access the nested data array ***
+        const tracksData = response?.tracks?.data; 
+
+        if (tracksData && Array.isArray(tracksData)) {
+          console.log(`[Home Page] Successfully received ${tracksData.length} tracks from Radar Weekly.`);
+          // Map the Deezer structure to the expected Track structure
+          const formattedTracks = tracksData.map((item: any): Track => ({
+            id: item.id?.toString() ?? Math.random().toString(),
+            name: item.title ?? 'Unknown Track',
+            artists: item.artist ? [{ id: item.artist.id?.toString(), name: item.artist.name }] : [],
+                    album: {
+                id: item.album?.id?.toString(),
+                name: item.album?.title,
+                images: item.album?.cover_medium ? [{ url: item.album.cover_medium, height: 300, width: 300 }] : [],
+            },
+            duration_ms: item.duration ? item.duration * 1000 : undefined,
+            preview_url: item.preview || null,
+          }));
+          setRadarWeeklyTracks(formattedTracks);
         } else {
-          console.warn('[Home Page] Radar Weekly API did not return expected { tracks: [] } format.', response);
+          console.warn('[Home Page] Radar Weekly API did not return expected { tracks: { data: [...] } } format.', response);
           setRadarWeeklyTracks([]);
         }
       } catch (error) {
@@ -784,24 +838,56 @@ export default function Home() {
     fetchNewReleases();
   }, [session]);
 
+  // --- Carousel Auto-slide Effect ---
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setActiveIndex((prevIndex) => (prevIndex + 1) % carouselItems.length);
+    }, 4000); // Change slide every 4 seconds
+
+    return () => clearInterval(interval); // Cleanup interval on unmount
+  }, []);
+
+  // --- Framer Motion Variants for Carousel ---
+  const slideVariants = {
+    enter: (direction: number) => ({
+      x: direction > 0 ? '100%' : '-100%',
+      opacity: 0
+    }),
+    center: {
+      zIndex: 1,
+      x: 0,
+      opacity: 1
+    },
+    exit: (direction: number) => ({
+      zIndex: 0,
+      x: direction < 0 ? '100%' : '-100%',
+      opacity: 0
+    })
+  };
+
+  // Determine slide direction (always forward in this case)
+  const slideDirection = 1; 
+
   return (
     <>
       <Navbar />
       
-      <main className="pt-20 pb-24 overflow-hidden">
+      <main className="pb-24 overflow-x-hidden">
         <div className="bg-gradient-to-b from-black to-[#121212] absolute top-0 left-0 right-0 h-96 -z-10" />
+        
+        {/* --- Hero Section --- */}
         <motion.div 
           ref={heroRef}
           initial={{ opacity: 0 }}
           animate={{ opacity: heroInView ? 1 : 0 }}
           transition={{ duration: 0.5 }}
-          className="min-h-[85vh] flex flex-col items-center justify-center text-center px-4 relative"
+          className="min-h-[90vh] md:min-h-[85vh] flex flex-col items-center justify-center text-center px-4 relative overflow-hidden" 
           style={{ 
-            background: `radial-gradient(circle at center, rgba(29,185,84,0.1) 0%, rgba(18,18,18,0) 70%)`,
+            background: `radial-gradient(circle at center top, rgba(29,185,84,0.15) 0%, rgba(18,18,18,0) 70%)`, 
           }}
         >
               <motion.h1 
-            className="text-5xl md:text-7xl font-extrabold mb-6"
+            className="text-5xl md:text-7xl font-extrabold mb-10 md:mb-12"
                 initial={{ y: 20, opacity: 0 }}
                 animate={{ y: 0, opacity: 1 }}
             transition={{ duration: 0.8, delay: 0.2 }}
@@ -809,40 +895,48 @@ export default function Home() {
             <span className="text-white">Music</span>
             <span className="text-[#1DB954]">boxd</span>
         </motion.h1>
-              <motion.p 
-            className="text-xl md:text-2xl mb-8 max-w-2xl text-gray-300"
-            initial={{ y: 30, opacity: 0 }}
-                animate={{ y: 0, opacity: 1 }}
-            transition={{ duration: 0.8, delay: 0.4 }}
-              >
-            Rate, discover, and share your music taste with the world.
-              </motion.p>
-              
+
+          {/* --- Carousel Container --- */}
+          <div className="relative w-full max-w-3xl h-48 md:h-56 flex items-center justify-center">
+            <AnimatePresence initial={false} custom={slideDirection}>
               <motion.div
-            className="flex flex-col sm:flex-row gap-4"
-            initial={{ y: 40, opacity: 0 }}
-                animate={{ y: 0, opacity: 1 }}
-            transition={{ duration: 0.8, delay: 0.6 }}
+                key={activeIndex}
+                custom={slideDirection}
+                variants={slideVariants}
+                initial="enter"
+                animate="center"
+                exit="exit"
+                transition={{
+                  x: { type: "spring", stiffness: 200, damping: 30 },
+                  opacity: { duration: 0.5 }
+                }}
+                className="absolute inset-0 w-full h-full flex flex-col items-center justify-center"
               >
-            <Link href="/discover" className="musicboxd-button">
-              Discover
+                <div className="relative z-10 p-4">
+                    <h2 className="text-2xl md:text-3xl font-semibold text-white mb-2 md:mb-3">
+                        {carouselItems[activeIndex].title}
+                    </h2>
+                    <p className="text-base md:text-lg mb-4 md:mb-6 max-w-xl text-neutral-300">
+                        {carouselItems[activeIndex].description}
+                    </p>
+                    <Link href={carouselItems[activeIndex].link} className="musicboxd-button inline-block px-6 py-2.5 text-sm">
+                        Explore {carouselItems[activeIndex].title}
                 </Link>
-            <Link href="/community" className="musicboxd-button-secondary">
-              Community
-          </Link>
+                </div>
               </motion.div>
+            </AnimatePresence>
+          </div>
         </motion.div>
 
         {/* Main content */}
-        <div className="max-w-7xl mx-auto px-4 pb-20">
-          {/* Update Section to Deezer Top Chart */}
+        <div className="max-w-7xl mx-auto px-4 pb-20 relative z-10 -mt-16 md:-mt-20">
           <section className="mb-20">
-            <SectionTitle highlight>Top Tracks (Deezer)</SectionTitle> {/* Update title */} 
+            <SectionTitle highlight>Top Tracks (Deezer)</SectionTitle>
             <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-6"> 
-              {topChartLoading ? ( // Use updated loading state
+              {topChartLoading ? (
                 Array.from({ length: 12 }).map((_, i) => <SkeletonCard key={i} />)
-              ) : topChartTracks.length > 0 ? ( // Use updated tracks state
-                topChartTracks.slice(0, 12).map((track, index) => ( // Use updated tracks state
+              ) : topChartTracks.length > 0 ? (
+                topChartTracks.slice(0, 12).map((track, index) => (
                   <TrackCard key={track.id || index} track={track} index={index} priority={index < 4} />
               ))
             ) : (
@@ -851,14 +945,13 @@ export default function Home() {
           </div>
         </section>
 
-          {/* Add New Radar Weekly Section */}
           <section className="mb-20">
             <SectionTitle>Radar Weekly</SectionTitle>
             <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-6">
               {radarWeeklyLoading ? (
                   Array.from({ length: 6 }).map((_, i) => <SkeletonCard key={i} />)
               ) : radarWeeklyTracks.length > 0 ? (
-                radarWeeklyTracks.map((track, index) => ( // Display all fetched (up to 6)
+                radarWeeklyTracks.map((track, index) => (
                   <TrackCard key={track.id || index} track={track} index={index} priority={index < 2} />
               ))
             ) : (
@@ -867,7 +960,6 @@ export default function Home() {
           </div>
         </section>
 
-          {/* 2010 Bangers & Activity Section */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 px-4 mb-12">
           <div className="lg:col-span-2">
               <div className="flex justify-between items-center mb-6">
@@ -940,7 +1032,6 @@ export default function Home() {
             </div>
         </div>
 
-            {/* Add back the New Releases section */}
           <section className="mb-12 px-4">
             <SectionTitle>New Releases</SectionTitle>
             <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-6">
@@ -954,11 +1045,6 @@ export default function Home() {
           ) : (
                   // Fallback display if fetch fails or returns empty
                   <p className="col-span-full text-center text-neutral-400">Could not load new releases.</p>
-                  /* Or display mock albums: 
-                  getMockTracks().slice(0,6).map((track, index) => ( 
-                     <AlbumCard key={track.album.id} album={track.album} index={index} priority={index < 2} /> 
-                  )) 
-                  */
           )}
         </div>
           </section>

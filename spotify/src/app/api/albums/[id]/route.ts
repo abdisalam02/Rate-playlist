@@ -4,11 +4,14 @@ import { authOptions } from '@/lib/auth';
 
 export async function GET(
   request: NextRequest,
-  context
+  { params }: { params: { id: string } }
 ) {
+  // Explicitly await the request object (Troubleshooting step) - REMOVE THIS
+  // await request;
+  
   try {
     const session = await getServerSession(authOptions);
-    const albumId = context.params.id;
+    const albumId = params.id;
     
     if (!albumId) {
       console.error("[API Album] Album ID missing unexpectedly despite route match.");

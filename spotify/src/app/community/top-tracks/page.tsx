@@ -1,14 +1,21 @@
-'use client';
+import React from 'react';
+// Restore framer-motion import for MusicWaveAnimation
+import { motion } from 'framer-motion'; 
+// Remove imports only needed by the old TrackItem
+// import { useState, useEffect } from 'react'; 
+// import { motion, AnimatePresence } from 'framer-motion';
+// import { toast } from 'react-hot-toast';
 
-import { useState, useEffect } from 'react';
-import { useSession } from 'next-auth/react';
-import Navbar from '@/app/components/Navbar';
+// Keep necessary top-level imports
 import Link from 'next/link';
-import { motion, AnimatePresence } from 'framer-motion';
 import Image from 'next/image';
-import { useInView } from 'react-intersection-observer';
-import { useAudio } from '@/app/providers';
-import { toast } from 'react-hot-toast';
+import Navbar from '@/app/components/Navbar';
+import { Track } from '@/types.d';
+import TokenRefresher from '@/app/components/TokenRefresher';
+// Remove useAudio import - not needed in server component
+// import { useAudio } from '@/app/providers'; 
+// Import the extracted client component
+import TrackCardClient from './TrackCard'; 
 
 // SVG Star components for better visuals
 const StarFilled = () => (
@@ -29,7 +36,7 @@ const StarEmpty = () => (
   </svg>
 );
 
-// Music Wave Animation Component
+// Music Wave Animation Component (Uses motion)
 function MusicWaveAnimation() {
   return (
     <div className="flex space-x-0.5 items-end h-4">
@@ -100,307 +107,63 @@ const sampleReviews = [
   "So many layers to this song, I discover something new every listen."
 ];
 
-function TrackItem({ track, index }: { track: any; index: number }) {
-  const [isHovered, setIsHovered] = useState(false);
-  const [randomReview, setRandomReview] = useState("");
-  const { playingTrack, isPlaying, playTrack } = useAudio();
-  
-  const isCurrentTrack = playingTrack?.id === track.id;
-  const hasPreview = !!track.preview_url;
-  
-  // Generate a random review when the component mounts or track changes
-  useEffect(() => {
-    const reviewIndex = Math.floor(Math.random() * sampleReviews.length);
-    setRandomReview(sampleReviews[reviewIndex]);
-  }, [track.id]);
-  
-  // Function to handle track play
-  const handlePlayTrack = (e: React.MouseEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    
-    if (hasPreview) {
-      playTrack({
-        id: track.id,
-        name: track.name,
-        preview_url: track.preview_url,
-        artists: track.artists,
-        album: {
-          images: track.album?.images
-        }
-      });
-    } else {
-      toast.error('No preview available for this track');
+async function getTopTracks(limit = 50) {
+  const baseUrl = process.env.NEXTAUTH_URL || '';
+  if (!baseUrl) {
+    console.error("[TopTracksPage] Error: NEXTAUTH_URL not set.");
+    return [];
+  }
+  const apiUrl = `${baseUrl}/api/community/top-rated?type=track&limit=${limit}`;
+  console.log(`[TopTracksPage] Fetching from: ${apiUrl}`);
+  try {
+    const res = await fetch(apiUrl, { cache: 'no-store' });
+    if (!res.ok) {
+      throw new Error(`Failed to fetch top tracks: ${res.statusText}`);
     }
-  };
-  
-  return (
-    <motion.div 
-      initial={{ opacity: 0, y: 20 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.3, delay: index * 0.05 }}
-      className="group relative overflow-hidden bg-gradient-to-b from-gray-800 to-gray-900 rounded-lg shadow-xl"
-      onMouseEnter={() => setIsHovered(true)}
-      onMouseLeave={() => setIsHovered(false)}
-    >
-      <Link href={`/track/${track.id}`} className="block">
-        <div className="relative aspect-square overflow-hidden">
-          <Image 
-            src={track.album?.images?.[0]?.url || '/placeholder.png'} 
-            alt={track.name}
-            fill
-            className={`object-cover transition-all duration-300 ${isHovered ? 'scale-110 blur-sm' : 'scale-100'}`}
-            sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
-          />
-          <div className={`absolute inset-0 bg-gradient-to-t ${isHovered ? 'from-black/90 to-black/40' : 'from-black/70 to-transparent'} transition-all duration-300`}></div>
-          
-          {/* Play Button */}
-          <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 transition-opacity z-20">
-            <button
-              onClick={handlePlayTrack}
-              className={`${hasPreview ? 'hover:scale-110' : 'cursor-not-allowed opacity-70'} transition-all duration-200 bg-[#1DB954] text-black rounded-full p-3 shadow-lg`}
-              disabled={!hasPreview}
-            >
-              {isCurrentTrack && isPlaying ? (
-                <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" viewBox="0 0 20 20" fill="currentColor">
-                  <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zM7 8a1 1 0 012 0v4a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v4a1 1 0 102 0V8a1 1 0 00-1-1z" clipRule="evenodd" />
-                </svg>
-              ) : (
-                <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" viewBox="0 0 20 20" fill="currentColor">
-                  <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM9.555 7.168A1 1 0 008 8v4a1 1 0 001.555.832l3-2a1 1 0 000-1.664l-3-2z" clipRule="evenodd" />
-                </svg>
-              )}
-            </button>
-          </div>
-          
-          {/* Now Playing Indicator */}
-          {isCurrentTrack && isPlaying && (
-            <div className="absolute bottom-3 left-3 z-10">
-              <MusicWaveAnimation />
-            </div>
-          )}
-          
-          <div className="absolute bottom-4 left-4 right-4 z-10">
-            <h3 className="font-bold text-white text-lg line-clamp-1">{track.name}</h3>
-            <p className="text-gray-300 text-sm line-clamp-1">
-              {track.artists?.map((artist: any) => artist.name).join(', ')}
-            </p>
-            <div className="mt-1">
-              <StarRating rating={track.average_rating || 0} />
-            </div>
-            
-            <AnimatePresence>
-              {isHovered && (
-                <motion.div
-                  initial={{ opacity: 0, y: 10 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, y: 10 }}
-                  transition={{ duration: 0.2 }}
-                >
-                  <ReviewBubble review={randomReview} />
-                </motion.div>
-              )}
-            </AnimatePresence>
-          </div>
-        </div>
-      </Link>
-    </motion.div>
-  );
+    const data = await res.json();
+    console.log(`[TopTracksPage] Received ${data?.items?.length || 0} tracks.`);
+    return data.items || [];
+  } catch (error) {
+    console.error('[TopTracksPage] Fetch error:', error);
+    return [];
+  }
 }
 
-export default function TopTracks() {
-  const { data: session } = useSession();
-  const [tracks, setTracks] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [page, setPage] = useState(1);
-  const [hasMore, setHasMore] = useState(true);
-  
-  const { ref, inView } = useInView({
-    threshold: 0.1,
-    triggerOnce: false,
-  });
-  
-  const fetchTopTracks = async (pageNum: number) => {
-    try {
-      setLoading(true);
-      const response = await fetch(`/api/community/top-rated?type=track&page=${pageNum}&limit=12`);
-      
-      if (!response.ok) {
-        throw new Error(`Error: ${response.status}`);
-      }
-      
-      const data = await response.json();
-      
-      if (data.items && data.items.length > 0) {
-        if (pageNum === 1) {
-          setTracks(data.items);
-        } else {
-          setTracks(prev => [...prev, ...data.items]);
-        }
-        setHasMore(data.items.length === 12);
-      } else {
-        setHasMore(false);
-        
-        // If first page returns no results, use mock data
-        if (pageNum === 1) {
-          useMockData();
-        }
-      }
-    } catch (error) {
-      console.error('Failed to fetch top tracks:', error);
-      setError('Failed to load top tracks. Please try again later.');
-      
-      // Use mock data on error
-      if (pageNum === 1) {
-        useMockData();
-      }
-    } finally {
-      setLoading(false);
-    }
-  };
-  
-  // Load more tracks when reaching the end of the page
-  useEffect(() => {
-    if (inView && !loading && hasMore) {
-      setPage(prevPage => prevPage + 1);
-    }
-  }, [inView, loading, hasMore]);
-  
-  // Fetch initial data
-  useEffect(() => {
-    fetchTopTracks(page);
-  }, [page]);
-  
-  // Mock data for demo purposes
-  const useMockData = () => {
-    const mockTracks = [
-      {
-        id: '4iV5W9uYEdYUVa79Axb7Rh',
-        name: 'Starboy',
-        artists: [{ name: 'The Weeknd' }, { name: 'Daft Punk' }],
-        album: {
-          name: 'Starboy',
-          images: [{ url: 'https://i.scdn.co/image/ab67616d0000b2734718e2b124f79258be7bc452' }]
-        },
-        preview_url: 'https://p.scdn.co/mp3-preview/8b86838c05e89d60f97a3dab0c17e89b86a40be8',
-        average_rating: 4.7,
-        rating_count: 583
-      },
-      {
-        id: '7qiZfU4dY1lWllzX7mPBI3',
-        name: 'Shape of You',
-        artists: [{ name: 'Ed Sheeran' }],
-        album: {
-          name: '÷ (Divide)',
-          images: [{ url: 'https://i.scdn.co/image/ab67616d0000b273ba5db46f4b838ef6027e6f96' }]
-        },
-        preview_url: 'https://p.scdn.co/mp3-preview/84462d8e1e4d0f9e5ccd06f0da390f65843774a2',
-        average_rating: 4.3,
-        rating_count: 612
-      },
-      {
-        id: '4LwU4Vp6od3Sb08CsP99CR',
-        name: 'HUMBLE.',
-        artists: [{ name: 'Kendrick Lamar' }],
-        album: {
-          name: 'DAMN.',
-          images: [{ url: 'https://i.scdn.co/image/ab67616d0000b2732c7c26968c01c6f12c4896f0' }]
-        },
-        preview_url: 'https://p.scdn.co/mp3-preview/8bfda39b64aaa94135b85e68e8e84b3b58d9ccce',
-        average_rating: 4.9,
-        rating_count: 723
-      },
-      {
-        id: '0E9ZjEAyAwOXZ7wJC0PD33',
-        name: 'Blinding Lights',
-        artists: [{ name: 'The Weeknd' }],
-        album: {
-          name: 'After Hours',
-          images: [{ url: 'https://i.scdn.co/image/ab67616d0000b273c8e97032c552bde0dab9a2e8' }]
-        },
-        preview_url: 'https://p.scdn.co/mp3-preview/6ecfcc4e5c6c8d933a683f50010f2a2fe93dde0c',
-        average_rating: 4.8,
-        rating_count: 832
-      },
-      {
-        id: '5ghIJDpPoe3CfHMGu71E6T',
-        name: 'Bohemian Rhapsody',
-        artists: [{ name: 'Queen' }],
-        album: {
-          name: 'A Night At The Opera',
-          images: [{ url: 'https://i.scdn.co/image/ab67616d0000b273a0e7a323c3555c0c457affb5' }]
-        },
-        preview_url: 'https://p.scdn.co/mp3-preview/5dabdf63b8711f3a7a169a8da0fb5a12c6940a15',
-        average_rating: 4.9,
-        rating_count: 1024
-      },
-      {
-        id: '4Cy0NHJ8Gh0xMdwyM9RkQm',
-        name: 'Good As Hell',
-        artists: [{ name: 'Lizzo' }],
-        album: {
-          name: 'Cuz I Love You',
-          images: [{ url: 'https://i.scdn.co/image/ab67616d0000b273d8f5ab3beb935e02c55eeeb4' }]
-        },
-        preview_url: 'https://p.scdn.co/mp3-preview/5f8f6955f44af00faf3ce9363efbc37d1f0e2e6e',
-        average_rating: 4.5,
-        rating_count: 437
-      }
-    ];
-    
-    setTracks(mockTracks);
-  };
-  
+// Define StarIcon here if not imported, or ensure it's defined globally
+const StarIcon = (props: React.SVGProps<SVGSVGElement>) => (
+    <svg {...props} xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+      <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
+    </svg>
+  );
+
+// --- TopCommunityTracksPage (Server Component) ---
+export default async function TopCommunityTracksPage() {
+  const topTracks = await getTopTracks();
+
   return (
-    <div className="min-h-screen bg-gradient-to-b from-[#121212] to-[#1a1a1a]">
+    <div className="bg-gradient-to-b from-[#1f1f1f] to-[#121212] min-h-screen text-white">
+      <TokenRefresher />
       <Navbar />
-      
-      <main className="container mx-auto px-4 pt-28 pb-16">
-        <div className="mb-8">
-          <h1 className="text-3xl md:text-4xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-[#1DB954] to-teal-400">
-            Top Rated Tracks
-          </h1>
-          <p className="text-gray-400 mt-2">The highest rated tracks based on our community's ratings</p>
+      <main className="pt-20 pb-20 px-6 max-w-7xl mx-auto">
+        <div className="flex items-center mb-6">
+          <Link href="/community" className="flex items-center bg-black bg-opacity-40 hover:bg-opacity-60 transition rounded-full p-2 mr-4">
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+              <path fillRule="evenodd" d="M12.707 5.293a1 1 0 010 1.414L9.414 10l3.293 3.293a1 1 0 01-1.414 1.414l-4-4a1 1 0 010-1.414l4-4a1 1 0 011.414 0z" clipRule="evenodd" />
+            </svg>
+          </Link>
+          <h1 className="text-3xl font-bold">Top Rated Tracks</h1>
         </div>
+        <p className="text-neutral-400 mb-8">Tracks most highly rated by the community.</p>
         
-        {error && (
-          <div className="bg-red-900/20 border border-red-900 rounded-lg p-4 mb-6">
-            <p className="text-red-400">{error}</p>
+        {topTracks.length > 0 ? (
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4">
+            {topTracks.map((track: Track & { average_rating?: number; rating_count?: number }) => (
+              <TrackCardClient key={track.id} track={track} />
+            ))}
           </div>
-        )}
-        
-        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
-          {tracks.map((track, index) => (
-            <TrackItem key={track.id} track={track} index={index} />
-          ))}
-          
-          {loading && (
-            <div className="col-span-full flex justify-center my-8">
-              <div className="animate-spin rounded-full h-10 w-10 border-t-2 border-b-2 border-[#1DB954]"></div>
-            </div>
-          )}
-        </div>
-        
-        {!loading && tracks.length === 0 && !error && (
-          <div className="text-center py-12">
-            <h3 className="text-xl font-semibold mb-2">No ratings yet</h3>
-            <p className="text-gray-400 mb-4">Be the first to rate some tracks and they'll appear here!</p>
-            <Link href="/discover" className="inline-block bg-[#1DB954] text-black font-bold px-6 py-3 rounded-full hover:bg-[#19a449] transition-colors">
-              Discover Tracks to Rate
-            </Link>
-          </div>
-        )}
-        
-        {hasMore && (
-          <div ref={ref} className="h-20 flex items-center justify-center mt-8">
-            <button
-              onClick={() => setPage(prev => prev + 1)}
-              disabled={loading}
-              className="px-8 py-3 rounded-full bg-white/10 hover:bg-white/20 transition-colors disabled:opacity-50"
-            >
-              {loading ? 'Loading...' : 'Load More Tracks'}
-            </button>
+        ) : (
+          <div className="flex justify-center items-center h-64">
+            <p className="text-neutral-400">No top rated tracks found or failed to load.</p>
           </div>
         )}
       </main>

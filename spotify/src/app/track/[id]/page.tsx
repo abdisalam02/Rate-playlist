@@ -6,27 +6,20 @@ import { useSession, signIn } from "next-auth/react";
 import Navbar from '@/app/components/Navbar';
 import Link from 'next/link';
 import { motion, AnimatePresence } from 'framer-motion';
+import { useAudio } from '@/app/providers';
+import { Track } from '@/types/index';
+import { PlayIcon, PauseIcon } from '@heroicons/react/24/solid';
 
-// Types
-interface Track {
-  id: string;
-  name: string;
-  preview_url: string | null;
-  artists: { name: string }[];
-  album?: { 
-    id?: string;
-    images: { url: string }[];
-    name?: string;
-    release_date?: string;
-  };
-  duration_ms?: number;
-  explicit?: boolean;
-  external_urls?: {
-    spotify?: string;
-  };
-  requires_auth?: boolean;
+// Helper function to format duration from ms to M:SS
+function formatDuration(ms: number): string {
+  if (!ms) return '0:00';
+  const totalSeconds = Math.floor(ms / 1000);
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+  return `${minutes}:${seconds.toString().padStart(2, '0')}`;
 }
 
+// Types
 interface UserRating {
   id: string;
   userId: string;
@@ -230,6 +223,7 @@ export default function TrackDetail() {
   const { id } = useParams();
   const router = useRouter();
   const { data: session, status } = useSession();
+  const { playTrack, playingTrack, isPlaying: isGlobalPlaying } = useAudio();
   
   // State for track data
   const [track, setTrack] = useState<Track | null>(null);
@@ -238,16 +232,15 @@ export default function TrackDetail() {
   const [ratingCount, setRatingCount] = useState(0);
   const [userReview, setUserReview] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [isFavorite, setIsFavorite] = useState(false);
-  const [isPlaying, setIsPlaying] = useState(false);
   const [showSuccess, setShowSuccess] = useState(false);
   const [successMessage, setSuccessMessage] = useState('');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [communityRatings, setCommunityRatings] = useState<UserRating[]>([]);
   
-  const audioRef = useState(null)[1];
-  
+  // Determine if the current track detail page's track is the one playing globally
+  const isCurrentTrackPlaying = playingTrack?.id?.toString() === track?.id?.toString() && isGlobalPlaying;
+
   // Fetch track data
   useEffect(() => {
     if (!id) return;
@@ -256,13 +249,16 @@ export default function TrackDetail() {
       try {
         setLoading(true);
         
-        // Use the existing tracks API endpoint instead of the non-existent spotify/track endpoint
-        const trackRes = await fetch(`/api/tracks/${id}`);
+        // Fetch from the consolidated tracks endpoint
+        const trackRes = await fetch(`/api/tracks/${id}`); 
         if (!trackRes.ok) {
-          throw new Error("Failed to fetch track data");
+           const errorBody = await trackRes.text();
+           console.error(`Failed API fetch for track ${id}: ${trackRes.status}`, errorBody);
+          throw new Error(`Failed to fetch track data: ${trackRes.statusText}`);
         }
         
-        const trackData = await trackRes.json();
+        const trackData: Track = await trackRes.json();
+        console.log("Fetched Track Data:", trackData); // Log to check preview_url
         setTrack(trackData);
         
         // Fetch user's rating if logged in
@@ -275,13 +271,6 @@ export default function TrackDetail() {
               setUserRating(userRatingData.rating * 2);
               setUserReview(userRatingData.review || '');
             }
-          }
-          
-          // Fetch favorite status
-          const favoriteRes = await fetch(`/api/check-favorite?itemId=${id}&itemType=track`);
-          if (favoriteRes.ok) {
-            const favoriteData = await favoriteRes.json();
-            setIsFavorite(favoriteData.isFavorite);
           }
         }
         
@@ -305,9 +294,9 @@ export default function TrackDetail() {
           }));
           setCommunityRatings(convertedRatings);
         }
-        
+
       } catch (error) {
-        console.error("Error:", error);
+        console.error("Error fetching track detail data:", error);
         setError(error instanceof Error ? error.message : "An unknown error occurred");
       } finally {
         setLoading(false);
@@ -317,45 +306,59 @@ export default function TrackDetail() {
     fetchTrackData();
   }, [id, session]);
   
+  // Fetch community ratings & user's rating/favorite status
+  useEffect(() => {
+    // ... existing community fetch logic ...
+  }, [id, session?.user?.id]);
+
   // Submit rating and review
   const handleRatingSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     
+    // Use the track ID from the fetched track state, not from params
+    const itemIdToSubmit = track?.id; 
+
     if (!session) {
+      // Handle not logged in
+      console.warn("User not logged in, cannot submit rating.");
+      // Optionally redirect to login or show message
+      return;
+    }
+
+    if (!itemIdToSubmit) {
+      console.error("Cannot submit rating: Track ID is missing from state.");
+      alert("Error: Could not determine track ID.");
       return;
     }
     
     try {
       setIsSubmitting(true);
-      console.log("Submitting rating with session:", !!session, "User ID:", session?.user?.id);
+      console.log("Submitting rating with session:", !!session, "User ID:", session?.user?.id, "Item ID:", itemIdToSubmit);
       
-      // The userRating from the StarRating component is on a 0-10 scale
-      // But the API expects a 0-5 scale, so we need to convert it
       if (typeof userRating !== 'number' || userRating < 0 || userRating > 10) {
         throw new Error('Invalid rating value');
       }
       
-      // Convert from 0-10 scale to 0-5 scale
+      // Convert rating from UI scale (0-10) to API scale (0-5)
       const apiRating = userRating / 2;
       
-      console.log(`Converting rating from ${userRating} (0-10 scale) to ${apiRating} (0-5 scale)`);
+      console.log(`Converting rating from ${userRating} (0-10 scale) to ${apiRating} (0-5 scale) for item ${itemIdToSubmit}`);
       
       const response = await fetch('/api/ratings', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Cache-Control': 'no-cache'
+          'Cache-Control': 'no-cache' // Ensure fresh request
         },
-        credentials: 'include',
+        // credentials: 'include', // May not be needed if using NextAuth session
         body: JSON.stringify({
-          itemId: id,
+          itemId: itemIdToSubmit, // *** USE TRACK ID FROM STATE ***
           itemType: 'track',
-          rating: apiRating, // Send the converted rating to the API
+          rating: apiRating, 
           review: userReview
         }),
       });
       
-      // Log response status for debugging
       console.log(`Rating submission status: ${response.status}`);
       
       if (!response.ok) {
@@ -365,38 +368,32 @@ export default function TrackDetail() {
         throw new Error(`Failed to submit rating: ${errorMessage}`);
       }
       
-      // Update the UI
       const result = await response.json();
       console.log("Rating submitted:", result);
       
-      // Show success message
       setSuccessMessage("Your rating has been saved!");
       setShowSuccess(true);
       setTimeout(() => setShowSuccess(false), 3000);
       
-      // Refresh average rating
-      const avgResponse = await fetch(`/api/ratings/average?itemId=${id}&itemType=track`, {
+      const avgResponse = await fetch(`/api/ratings/average?itemId=${itemIdToSubmit}&itemType=track`, {
         credentials: 'include'
       });
       
       if (avgResponse.ok) {
         const avgData = await avgResponse.json();
-        // Convert from API scale (0-5) to UI scale (0-10)
         setAverageRating(avgData.average ? avgData.average * 2 : 0);
         setRatingCount(avgData.count || 0);
       }
       
-      // Refresh community ratings
-      const ratingsResponse = await fetch(`/api/ratings/item?itemId=${id}&itemType=track&limit=10`, {
+      const ratingsResponse = await fetch(`/api/ratings/item?itemId=${itemIdToSubmit}&itemType=track&limit=10`, {
         credentials: 'include'
       });
       
       if (ratingsResponse.ok) {
         const ratingsData = await ratingsResponse.json();
-        // Convert community ratings from API scale (0-5) to UI scale (0-10)
         const convertedRatings: UserRating[] = (ratingsData.ratings || []).map((rating: UserRating) => ({
           ...rating,
-          rating: rating.rating * 2 // Convert from 0-5 to 0-10 scale
+          rating: rating.rating * 2 
         }));
         setCommunityRatings(convertedRatings);
       }
@@ -409,412 +406,299 @@ export default function TrackDetail() {
     }
   };
   
-  // Toggle favorite status
-  const toggleFavorite = async () => {
-    if (!session) {
-      router.push('/login');
+  const handlePlayToggle = () => {
+    console.log("[TrackDetail] handlePlayToggle called"); // Log start
+    if (!track) {
+      console.log("[TrackDetail] No track data, returning.");
       return;
     }
     
-    try {
-      if (isFavorite) {
-        // Remove from favorites
-        await fetch(`/api/favorites?itemId=${id}&itemType=track`, {
-          method: 'DELETE',
-          credentials: 'include'
-        });
-      } else {
-        // Add to favorites
-        await fetch('/api/favorites', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          credentials: 'include',
-          body: JSON.stringify({
-            itemId: id,
-            itemType: 'track'
-          }),
-        });
-      }
-      
-      // Toggle the UI state
-      setIsFavorite(!isFavorite);
-      
-    } catch (err) {
-      console.error("Error toggling favorite:", err);
-      alert("Failed to update favorites. Please try again.");
+    console.log(`[TrackDetail] Checking preview_url: ${track.preview_url}`); // Log the URL
+    if (!track.preview_url) {
+      console.log("[TrackDetail] No preview_url found, showing alert.");
+      alert('Preview not available for this track.');
+      return;
     }
-  };
-  
-  // Toggle play/pause
-  const togglePlay = () => {
-    const audioPlayer = document.getElementById('audioPlayer') as HTMLAudioElement | null;
     
-    if (audioPlayer) {
-      if (isPlaying) {
-        audioPlayer.pause();
-      } else {
-        audioPlayer.play();
+    console.log("[TrackDetail] Preview URL found, calling playTrack..."); // Log before calling playTrack
+    playTrack({
+      id: track.id.toString(),
+      name: track.name || 'Unknown Track',
+      preview_url: track.preview_url,
+      artists: track.artists?.map(a => ({ name: a.name })) || [],
+      album: {
+        name: track.album?.name || 'Unknown Album',
+        images: track.album?.images?.map(img => ({ url: img.url })) || [],
       }
-      
-      setIsPlaying(!isPlaying);
-    }
+    });
   };
 
   if (loading) {
-    return (
-      <div className="min-h-screen bg-[#121212]">
-        <Navbar />
-        <div className="flex justify-center items-center h-[80vh]">
-          <div className="animate-spin rounded-full h-16 w-16 border-t-2 border-b-2 border-[#1DB954]"></div>
-        </div>
-      </div>
-    );
+    return <div className="flex justify-center items-center min-h-screen bg-gradient-to-b from-[#1f1f1f] to-[#121212] text-white">Loading...</div>;
   }
 
-  if (error || !track) {
-    return (
-      <div className="min-h-screen bg-[#121212]">
-        <Navbar />
-        <div className="container mx-auto px-4 py-8 text-center">
-          <div className="bg-[#181818] p-6 rounded-lg max-w-md mx-auto">
-            <svg xmlns="http://www.w3.org/2000/svg" className="h-12 w-12 mx-auto text-red-500 mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-            </svg>
-            <h2 className="text-xl font-bold mb-2">Error</h2>
-            <p className="mb-4">{error || "Failed to load track"}</p>
-            <button
-              onClick={() => router.push('/')}
-              className="bg-[#1DB954] text-black font-bold py-2 px-4 rounded-full hover:bg-opacity-90"
-            >
-              Go Back Home
-            </button>
-          </div>
-        </div>
-      </div>
-    );
+  if (error) {
+    return <div className="flex justify-center items-center min-h-screen bg-gradient-to-b from-[#1f1f1f] to-[#121212] text-white">Error: {error}</div>;
   }
+
+  if (!track) {
+    return <div className="flex justify-center items-center min-h-screen bg-gradient-to-b from-[#1f1f1f] to-[#121212] text-white">Track not found.</div>;
+  }
+
+  const imageUrl = track.album?.images?.[0]?.url || 'https://placehold.co/600x600/1DB954/FFFFFF?text=Track';
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-[#0f0f0f] to-[#1e1e1e]">
+    <div className="bg-gradient-to-b from-[#1f1f1f] to-[#121212] min-h-screen text-white">
       <Navbar />
-      
-      <AnimatePresence>
-        {showSuccess && (
-          <SuccessToast message={successMessage} />
-        )}
-      </AnimatePresence>
-      
-      {track?.requires_auth ? (
-        <div className="container mx-auto px-4 py-8 text-center">
-          <div className="bg-[#181818] p-6 rounded-lg max-w-md mx-auto mt-16 shadow-xl">
-            <svg xmlns="http://www.w3.org/2000/svg" className="h-12 w-12 mx-auto text-[#1DB954] mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
-            </svg>
-            <h2 className="text-xl font-bold mb-2">Authentication Required</h2>
-            <p className="mb-4">Please sign in with your Spotify account to view track details</p>
-            <button
-              onClick={() => signIn("spotify")}
-              className="bg-[#1DB954] text-black font-bold py-2 px-4 rounded-full hover:bg-opacity-90 transition-all"
-            >
-              Sign In with Spotify
-            </button>
-          </div>
-        </div>
-      ) : (
-        <div className="container mx-auto px-4 py-8 pt-20 max-w-6xl">
-          {/* Track Hero Section */}
-          <div className="flex flex-col md:flex-row gap-8 mb-12 bg-[#181818] p-6 rounded-lg shadow-xl">
-            {/* Track Image */}
-            <div className="w-full md:w-1/3 lg:w-1/4">
-              <motion.div 
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.5 }}
-                className="aspect-square rounded-lg overflow-hidden shadow-xl"
-              >
-                <img 
-                  src={track.album?.images?.[0]?.url || '/placeholder.png'} 
-                  alt={track.name}
-                  className="w-full h-full object-cover"
-                />
-                
-                {track.preview_url && (
-                  <div className="absolute bottom-4 left-4">
-                    {isPlaying && <MusicWaveIndicator />}
-                  </div>
-                )}
-              </motion.div>
-              
-              {/* Action Buttons */}
-              <div className="flex flex-col gap-3 mt-4">
-                {track.preview_url && (
-                  <button
-                    onClick={togglePlay}
-                    className="bg-[#1DB954] text-black font-bold py-3 rounded-full flex items-center justify-center hover:bg-opacity-90 transition-colors shadow-md"
-                  >
-                    {isPlaying ? (
-                      <><span className="mr-2">Pause Preview</span><span className="sr-only">Pause</span><svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
-                        <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zM7 8a1 1 0 012 0v4a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v4a1 1 0 102 0V8a1 1 0 00-1-1z" clipRule="evenodd" />
-                      </svg></>
-                    ) : (
-                      <><span className="mr-2">Play Preview</span><span className="sr-only">Play</span><svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
-                        <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM9.555 7.168A1 1 0 008 8v4a1 1 0 001.555.832l3-2a1 1 0 000-1.664l-3-2z" clipRule="evenodd" />
-                      </svg></>
-                    )}
-                  </button>
-                )}
-                
-                <a 
-                  href={track.external_urls?.spotify}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="bg-[#1DB954] text-black font-bold py-3 rounded-full flex items-center justify-center hover:bg-opacity-90 transition-colors shadow-md"
+      <main className="pt-20 pb-20 px-4 md:px-8 max-w-6xl mx-auto">
+        <AnimatePresence>
+          {showSuccess && <SuccessToast message={successMessage} />}
+        </AnimatePresence>
+        
+        {/* Back Button */}
+        <button 
+          onClick={() => router.back()} 
+          className="mb-6 inline-flex items-center gap-2 text-sm text-neutral-400 hover:text-white transition"
+        >
+          <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M12.707 5.293a1 1 0 010 1.414L9.414 10l3.293 3.293a1 1 0 01-1.414 1.414l-4-4a1 1 0 010-1.414l4-4a1 1 0 011.414 0z" clipRule="evenodd"></path></svg>
+          Back
+        </button>
+
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-8 md:gap-12">
+          {/* Left Column: Image, Basic Info */}
+          <div className="md:col-span-1">
+             {/* --- Image with Play Button Overlay --- */}
+            <div className="relative group aspect-square mb-6">
+              <img 
+                src={imageUrl}
+                alt={track.name || 'Track artwork'}
+                className="w-full h-full object-cover rounded-lg shadow-lg"
+                onError={(e) => {
+                  e.currentTarget.src = 'https://placehold.co/600x600/1DB954/FFFFFF?text=Track';
+                }}
+              />
+              {track.preview_url && (
+                <button
+                  onClick={handlePlayToggle}
+                  className="absolute inset-0 flex items-center justify-center bg-black bg-opacity-0 group-hover:bg-opacity-60 transition-opacity duration-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#1DB954]"
+                  aria-label={isCurrentTrackPlaying ? "Pause preview" : "Play preview"}
                 >
-                  <svg className="w-5 h-5 mr-2" viewBox="0 0 24 24" fill="currentColor">
-                    <path d="M12 0C5.4 0 0 5.4 0 12s5.4 12 12 12 12-5.4 12-12S18.66 0 12 0zm5.521 17.34c-.24.359-.66.48-1.021.24-2.82-1.74-6.36-2.101-10.561-1.141-.418.122-.779-.179-.899-.539-.12-.421.18-.78.54-.9 4.56-1.021 8.52-.6 11.64 1.32.42.18.479.659.301 1.02zm1.44-3.3c-.301.42-.841.6-1.262.3-3.239-1.98-8.159-2.58-11.939-1.38-.479.12-1.02-.12-1.14-.6-.12-.48.12-1.021.6-1.141C9.6 9.9 15 10.561 18.72 12.84c.361.181.54.78.241 1.2zm.12-3.36C15.24 8.4 8.82 8.16 5.16 9.301c-.6.179-1.2-.181-1.38-.721-.18-.601.18-1.2.72-1.381 4.26-1.26 11.28-1.02 15.721 1.621.539.3.719 1.02.419 1.56-.299.421-1.02.599-1.559.3z"/>
-                  </svg>
-                  Open in Spotify
-                </a>
-              </div>
-            </div>
-            
-            {/* Track Info */}
-            <div className="flex-1">
-              <div className="flex flex-col gap-2">
-                <motion.h1 
-                  className="text-3xl md:text-4xl lg:text-5xl font-bold text-white"
-                  initial={{ opacity: 0, y: 20 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ duration: 0.5, delay: 0.1 }}
-                >
-                  {track.name}
-                </motion.h1>
-                
-                <motion.p 
-                  className="text-xl text-gray-300"
-                  initial={{ opacity: 0, y: 20 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ duration: 0.5, delay: 0.2 }}
-                >
-                  {track.artists?.map(artist => artist.name).join(', ')}
-                </motion.p>
-                
-                <motion.p 
-                  className="text-gray-400"
-                  initial={{ opacity: 0, y: 20 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ duration: 0.5, delay: 0.25 }}
-                >
-                  Album: {track.album?.name}
-                </motion.p>
-                
-                <motion.div 
-                  className="flex items-center gap-4 text-sm text-gray-400 mt-2"
-                  initial={{ opacity: 0, y: 20 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ duration: 0.5, delay: 0.3 }}
-                >
-                  <span>{track.album?.release_date?.substring(0, 4)}</span>
-                  <span>•</span>
-                  <span>{track.duration_ms ? `${Math.floor(track.duration_ms / 60000)}:${String(Math.floor((track.duration_ms % 60000) / 1000)).padStart(2, '0')}` : '0:00'}</span>
-                  {track.explicit && (
-                    <>
-                      <span>•</span>
-                      <span className="px-1 py-0.5 bg-gray-600 text-xs rounded">E</span>
-                    </>
-                  )}
-                </motion.div>
-                
-                {/* Community Rating - Only show if there are ratings */}
-                {ratingCount > 0 && (
-                  <motion.div 
-                    className="mt-6 bg-[#282828] p-4 rounded-lg shadow-md"
-                    initial={{ opacity: 0, y: 20 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ duration: 0.5, delay: 0.4 }}
-                  >
-                    <h3 className="text-lg font-medium mb-2 text-white">Community Rating</h3>
-                    <div className="flex items-center gap-3">
-                      <StarRating rating={averageRating} onChange={() => {}} readonly={true} size="lg" />
-                      <span className="text-gray-400">({ratingCount} {ratingCount === 1 ? 'rating' : 'ratings'})</span>
-                    </div>
-                  </motion.div>
-                )}
-              </div>
-            </div>
-          </div>
-          
-          {/* Audio Player */}
-          {track.preview_url && (
-            <audio 
-              id="audioPlayer"
-              src={track.preview_url}
-              onPlay={() => setIsPlaying(true)}
-              onPause={() => setIsPlaying(false)}
-              onEnded={() => setIsPlaying(false)}
-              className="hidden"
-            />
-          )}
-          
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-            {/* Left column */}
-            <div className="lg:col-span-2">
-              {/* Community Ratings Section */}
-              <motion.div
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.5, delay: 0.7 }}
-                className="mb-12"
-              >
-                <div className="flex items-center justify-between mb-6">
-                  <h2 className="text-2xl font-bold text-white">Community Ratings & Reviews</h2>
-                  {session && (
-                    <button
-                      onClick={() => {
-                        const element = document.getElementById('user-rating-section');
-                        if (element) {
-                          element.scrollIntoView({ behavior: 'smooth' });
-                        }
-                      }}
-                      className="bg-[#1DB954]/20 text-[#1DB954] px-4 py-2 rounded-full text-sm hover:bg-[#1DB954]/30 transition-colors"
+                  <AnimatePresence initial={false} mode="wait">
+                    <motion.div
+                      key={isCurrentTrackPlaying ? 'pause' : 'play'}
+                      initial={{ opacity: 0, scale: 0.5 }}
+                      animate={{ opacity: 1, scale: 1 }}
+                      exit={{ opacity: 0, scale: 0.5 }}
+                      transition={{ duration: 0.2 }}
+                      className="text-white bg-[#1DB954] rounded-full p-3 shadow-lg opacity-0 group-hover:opacity-100 transition-opacity duration-300"
                     >
-                      Add Your Rating
-                    </button>
-                  )}
-                </div>
-                
-                {communityRatings.length > 0 ? (
-                  <div className="space-y-4">
-                    {communityRatings.map((rating) => (
-                      <UserRatingItem key={rating.id} rating={rating} />
-                    ))}
-                  </div>
-                ) : (
-                  <div className="bg-[#181818] rounded-lg p-8 text-center shadow-md">
-                    <p className="text-gray-400 mb-4">No ratings yet. Be the first to rate this track!</p>
-                    {!session && (
-                      <Link 
-                        href="/login"
-                        className="bg-[#1DB954] text-black font-bold py-2 px-6 rounded-full inline-block hover:scale-105 transition-transform"
-                      >
-                        Sign In to Rate
-                      </Link>
-                    )}
-                  </div>
-                )}
-              </motion.div>
-            </div>
-          
-            {/* Right column */}
-            <div>
-              {/* Your Rating Section */}
-              <motion.div 
-                id="user-rating-section"
-                className="bg-[#181818] p-6 rounded-lg shadow-xl mb-8"
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.5, delay: 0.5 }}
-              >
-                <h3 className="text-xl font-bold mb-4 text-white">Your Rating & Review</h3>
-                
-                {!session ? (
-                  <div className="text-center py-4">
-                    <p className="text-gray-400 mb-4">Sign in to rate and review this track</p>
-                    <Link 
-                      href="/login"
-                      className="bg-[#1DB954] text-black font-bold py-2 px-6 rounded-full inline-block hover:bg-opacity-90 transition-colors"
-                    >
-                      Sign In
-                    </Link>
-                  </div>
-                ) : (
-                  <form onSubmit={handleRatingSubmit}>
-                    <div className="mb-6">
-                      <label className="block text-sm font-medium mb-2 text-white">Your Rating</label>
-                      <StarRating 
-                        rating={userRating} 
-                        onChange={setUserRating} 
-                        size="lg"
-                      />
-                    </div>
-                    
-                    <div className="mb-6">
-                      <label htmlFor="review" className="block text-sm font-medium mb-2 text-white">Your Review (Optional)</label>
-                      <textarea
-                        id="review"
-                        rows={4}
-                        className="w-full bg-[#282828] text-white rounded-md px-4 py-3 focus:outline-none focus:ring-2 focus:ring-[#1DB954]"
-                        placeholder="Share your thoughts about this track..."
-                        value={userReview}
-                        onChange={(e) => setUserReview(e.target.value)}
-                      />
-                    </div>
-                    
-                    <div className="flex items-center justify-between">
-                      <button
-                        type="submit"
-                        disabled={isSubmitting || userRating === 0}
-                        className={`bg-[#1DB954] text-black font-bold py-3 px-8 rounded-full ${isSubmitting || userRating === 0 ? 'opacity-70 cursor-not-allowed' : 'hover:bg-opacity-90 transition-colors'}`}
-                      >
-                        {isSubmitting ? 'Saving...' : userRating ? 'Update Rating' : 'Save Rating'}
-                      </button>
-                      
-                      {userRating > 0 && (
-                        <p className="text-sm text-gray-400">
-                          {new Date().toLocaleDateString()} • {session?.user?.name}
-                        </p>
+                      {isCurrentTrackPlaying ? (
+                        <PauseIcon className="w-8 h-8 md:w-10 md:h-10" />
+                      ) : (
+                        <PlayIcon className="w-8 h-8 md:w-10 md:h-10" />
                       )}
-                    </div>
-                    
-                    {/* Success message */}
-                    <AnimatePresence>
-                      {showSuccess && (
-                        <motion.div 
-                          initial={{ opacity: 0, y: 10 }}
-                          animate={{ opacity: 1, y: 0 }}
-                          exit={{ opacity: 0 }}
-                          className="mt-4 bg-[#1DB954]/20 text-[#1DB954] p-2 rounded-md text-center"
-                        >
-                          {successMessage}
-                        </motion.div>
-                      )}
-                    </AnimatePresence>
-                  </form>
-                )}
-              </motion.div>
-              
-              {/* Album Link */}
-              {track.album && (
-                <motion.div 
-                  className="bg-[#181818] p-4 rounded-lg shadow-md"
-                  initial={{ opacity: 0, y: 20 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ duration: 0.5, delay: 0.6 }}
-                >
-                  <Link 
-                    href={`/album/${track.album?.id ?? ''}`}
-                    className="inline-flex items-center hover:bg-[#282828] transition-colors p-4 rounded-lg w-full"
-                  >
-                    <div className="w-16 h-16 mr-4 shrink-0">
-                      <img 
-                        src={track.album?.images?.[0]?.url || '/placeholder.png'} 
-                        alt={track.album?.name || ''}
-                        className="w-full h-full object-cover rounded"
-                      />
-                    </div>
-                    <div>
-                      <p className="text-sm text-gray-400">See full album</p>
-                      <p className="font-bold text-white">{track.album?.name}</p>
-                    </div>
-                  </Link>
-                </motion.div>
+                    </motion.div>
+                  </AnimatePresence>
+                </button>
               )}
             </div>
+            {/* --- End Image --- */}
+            
+            {/* Original Play Preview Button (now redundant, consider removing or keeping as secondary) */}
+            {track.preview_url && (
+              <button 
+                onClick={handlePlayToggle}
+                className="w-full bg-[#1DB954] text-black font-bold py-3 px-4 rounded-full hover:bg-[#1ED760] transition flex items-center justify-center gap-2 mb-4"
+              >
+                 {isCurrentTrackPlaying ? (
+                   <>
+                     <PauseIcon className="w-5 h-5" /> Pause Preview
+                     <MusicWaveIndicator /> 
+                   </>
+                 ) : (
+                   <>
+                     <PlayIcon className="w-5 h-5" /> Play Preview
+                   </>
+                 )}
+              </button>
+            )}
+             {/* --- End Original Button --- */}
+
+            <h1 className="text-3xl font-bold mb-2">{track.name}</h1>
+            <div className="text-lg text-neutral-400 mb-4">
+              {track.artists?.map((artist, index) => (
+                <span key={artist.id}>
+                  <Link href={`/artist/${artist.id}`} className="hover:underline">
+                    {artist.name}
+                  </Link>
+                  {index < track.artists!.length - 1 ? ', ' : ''}
+                </span>
+              ))}
+            </div>
+            <div className="text-sm text-neutral-500">
+              <span>Album: </span> 
+              <Link href={`/album/${track.album?.id}`} className="hover:underline">
+                {track.album?.name}
+              </Link> 
+              <span> • {track.album?.release_date?.substring(0, 4)}</span>
+            </div>
+            <div className="text-sm text-neutral-500">
+              Duration: {formatDuration(track.duration_ms || 0)}
+            </div>
+          </div>
+
+          {/* Right Column: Rating, Review, Community */}
+          <div className="md:col-span-2">
+            {/* Community Ratings Section */}
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.5, delay: 0.7 }}
+              className="mb-12"
+            >
+              <div className="flex items-center justify-between mb-6">
+                <h2 className="text-2xl font-bold text-white">Community Ratings & Reviews</h2>
+                {session && (
+                  <button
+                    onClick={() => {
+                      const element = document.getElementById('user-rating-section');
+                      if (element) {
+                        element.scrollIntoView({ behavior: 'smooth' });
+                      }
+                    }}
+                    className="bg-[#1DB954]/20 text-[#1DB954] px-4 py-2 rounded-full text-sm hover:bg-[#1DB954]/30 transition-colors"
+                  >
+                    Add Your Rating
+                  </button>
+                )}
+              </div>
+              
+              {communityRatings.length > 0 ? (
+                <div className="space-y-4">
+                  {communityRatings.map((rating) => (
+                    <UserRatingItem key={rating.id} rating={rating} />
+                  ))}
+                </div>
+              ) : (
+                <div className="bg-[#181818] rounded-lg p-8 text-center shadow-md">
+                  <p className="text-gray-400 mb-4">No ratings yet. Be the first to rate this track!</p>
+                  {!session && (
+                    <Link 
+                      href="/login"
+                      className="bg-[#1DB954] text-black font-bold py-2 px-6 rounded-full inline-block hover:scale-105 transition-transform"
+                    >
+                      Sign In to Rate
+                    </Link>
+                  )}
+                </div>
+              )}
+            </motion.div>
+
+            {/* Your Rating Section */}
+            <motion.div 
+              id="user-rating-section"
+              className="bg-[#181818] p-6 rounded-lg shadow-xl mb-8"
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.5, delay: 0.5 }}
+            >
+              <h3 className="text-xl font-bold mb-4 text-white">Your Rating & Review</h3>
+              
+              {!session ? (
+                <div className="text-center py-4">
+                  <p className="text-gray-400 mb-4">Sign in to rate and review this track</p>
+                  <Link 
+                    href="/login"
+                    className="bg-[#1DB954] text-black font-bold py-2 px-6 rounded-full inline-block hover:bg-opacity-90 transition-colors"
+                  >
+                    Sign In
+                  </Link>
+                </div>
+              ) : (
+                <form onSubmit={handleRatingSubmit}>
+                  <div className="mb-6">
+                    <label className="block text-sm font-medium mb-2 text-white">Your Rating</label>
+                    <StarRating 
+                      rating={userRating} 
+                      onChange={setUserRating} 
+                      size="lg"
+                    />
+                  </div>
+                  
+                  <div className="mb-6">
+                    <label htmlFor="review" className="block text-sm font-medium mb-2 text-white">Your Review (Optional)</label>
+                    <textarea
+                      id="review"
+                      rows={4}
+                      className="w-full bg-[#282828] text-white rounded-md px-4 py-3 focus:outline-none focus:ring-2 focus:ring-[#1DB954]"
+                      placeholder="Share your thoughts about this track..."
+                      value={userReview}
+                      onChange={(e) => setUserReview(e.target.value)}
+                    />
+                  </div>
+                  
+                  <div className="flex items-center justify-between">
+                    <button
+                      type="submit"
+                      disabled={isSubmitting || userRating === 0}
+                      className={`bg-[#1DB954] text-black font-bold py-3 px-8 rounded-full ${isSubmitting || userRating === 0 ? 'opacity-70 cursor-not-allowed' : 'hover:bg-opacity-90 transition-colors'}`}
+                    >
+                      {isSubmitting ? 'Saving...' : userRating ? 'Update Rating' : 'Save Rating'}
+                    </button>
+                    
+                    {userRating > 0 && (
+                      <p className="text-sm text-gray-400">
+                        {new Date().toLocaleDateString()} • {session?.user?.name}
+                      </p>
+                    )}
+                  </div>
+                  
+                  {/* Success message */}
+                  <AnimatePresence>
+                    {showSuccess && (
+                      <motion.div 
+                        initial={{ opacity: 0, y: 10 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        exit={{ opacity: 0 }}
+                        className="mt-4 bg-[#1DB954]/20 text-[#1DB954] p-2 rounded-md text-center"
+                      >
+                        {successMessage}
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
+                </form>
+              )}
+            </motion.div>
+            
+            {/* Album Link */}
+            {track.album && (
+              <motion.div 
+                className="bg-[#181818] p-4 rounded-lg shadow-md"
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.5, delay: 0.6 }}
+              >
+                <Link 
+                  href={`/album/${track.album?.id ?? ''}`}
+                  className="inline-flex items-center hover:bg-[#282828] transition-colors p-4 rounded-lg w-full"
+                >
+                  <div className="w-16 h-16 mr-4 shrink-0">
+                    <img 
+                      src={track.album?.images?.[0]?.url || '/placeholder.png'} 
+                      alt={track.album?.name || ''}
+                      className="w-full h-full object-cover rounded"
+                    />
+                  </div>
+                  <div>
+                    <p className="text-sm text-gray-400">See full album</p>
+                    <p className="font-bold text-white">{track.album?.name}</p>
+                  </div>
+                </Link>
+              </motion.div>
+            )}
           </div>
         </div>
-      )}
+      </main>
     </div>
   );
 } 

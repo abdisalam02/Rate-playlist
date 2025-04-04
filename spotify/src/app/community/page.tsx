@@ -311,7 +311,12 @@ export default function Community() {
             {/* Top Tracks Section */}
             {!loading && topTracks.length > 0 && (
               <div className="mt-6">
-                <h2 className="text-xl font-bold mb-4">Top Rated Tracks</h2>
+                <div className="flex justify-between items-center mb-4">
+                  <h2 className="text-2xl font-semibold">Top Rated Tracks</h2>
+                  <Link href="/community/top-tracks" className="text-sm text-gray-400 hover:text-white">
+                    View All
+                  </Link>
+                </div>
                 <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-8 gap-4">
                   {topTracks.map((track, index) => (
                     <MediaCard 
@@ -328,7 +333,12 @@ export default function Community() {
             {/* Top Albums Section */}
             {!loading && topAlbums.length > 0 && (
               <div className="mt-10">
-                <h2 className="text-xl font-bold mb-4">Top Rated Albums</h2>
+                <div className="flex justify-between items-center mb-4">
+                  <h2 className="text-2xl font-semibold">Top Rated Albums</h2>
+                  <Link href="/community/top-albums" className="text-sm text-gray-400 hover:text-white">
+                    View All
+                  </Link>
+                </div>
                 <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-8 gap-4">
                   {topAlbums.map((album, index) => (
                     <MediaCard 

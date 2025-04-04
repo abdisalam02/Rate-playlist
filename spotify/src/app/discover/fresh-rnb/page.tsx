@@ -2,109 +2,17 @@
 
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
-import Image from 'next/image';
 import { motion } from 'framer-motion';
-import { useAudio } from '../../providers'; // Adjust path as needed
+import { useAudio } from '@/app/providers'; // Corrected path assuming providers is at root
 import Navbar from '@/app/components/Navbar';
 import TokenRefresher from '@/app/components/TokenRefresher';
-
-interface Track {
-  id: string;
-  name: string;
-  artists: Array<{ name: string }>;
-  album: {
-    name: string;
-    images: Array<{ url: string }>;
-  };
-  duration_ms: number;
-  preview_url?: string | null;
-}
-
-// Helper functions (copied from current-hits/page.tsx)
-const handleImageError = (e: React.SyntheticEvent<HTMLImageElement, Event>) => {
-  e.currentTarget.src = 'https://placehold.co/400x400/1DB954/FFFFFF?text=Music';
-  e.currentTarget.onerror = null;
-};
-
-const formatDuration = (ms: number): string => {
-  if (isNaN(ms) || ms < 0) return '0:00';
-  const totalSeconds = Math.floor(ms / 1000);
-  const minutes = Math.floor(totalSeconds / 60);
-  const seconds = totalSeconds % 60;
-  return `${minutes}:${seconds.toString().padStart(2, '0')}`;
-};
-
-function MusicWaveAnimation() {
-  // ... (keep implementation from current-hits)
-   return (
-    <div className="flex space-x-0.5 items-end h-4">
-      {[0, 0.1, 0.2, 0.15, 0.25].map((delay, i) => (
-        <motion.div
-          key={i}
-          className="w-0.5 bg-[#1DB954] rounded-full"
-          animate={{ height: ["40%", "100%", "40%"] }}
-          transition={{
-            duration: 0.8,
-            repeat: Infinity,
-            delay,
-            ease: "easeInOut"
-          }}
-        />
-      ))}
-    </div>
-  );
-}
-
-function TrackListItem({ track, index, onPlay }: { track: Track; index: number; onPlay: (track: Track) => void }) {
-  const { playingTrack, isPlaying } = useAudio();
-  const isCurrentTrack = playingTrack?.id === track.id;
-  const [imageError, setImageError] = useState(false);
-
-  const imageUrl = imageError || !track.album?.images?.[0]?.url 
-    ? '/placeholder-track.png' 
-    : track.album.images[0].url;
-
-  return (
-    <motion.div
-      initial={{ opacity: 0, y: 20 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.3, delay: index * 0.05 }}
-      className="flex items-center space-x-4 p-3 bg-[#181818] hover:bg-[#282828] rounded-lg transition-colors cursor-pointer"
-      onClick={() => onPlay(track)}
-    >
-      <div className="flex-shrink-0 relative w-12 h-12">
-        <Image
-          src={imageUrl}
-          alt={track.album.name || track.name}
-          fill
-          sizes="48px"
-          className="rounded-md object-cover"
-          onError={() => setImageError(true)}
-        />
-        {isCurrentTrack && isPlaying && (
-          <div className="absolute inset-0 bg-black/50 flex items-center justify-center rounded-md">
-            <MusicWaveAnimation />
-          </div>
-        )}
-      </div>
-      <div className="flex-1 min-w-0">
-        <p className="text-white truncate font-medium">{track.name}</p>
-        <p className="text-gray-400 text-sm truncate">
-          {track.artists?.map(a => a.name).join(', ')}
-        </p>
-      </div>
-      <div className="text-gray-400 text-sm">
-        {formatDuration(track.duration_ms)}
-      </div>
-    </motion.div>
-  );
-}
+import TrackCard from '@/app/components/TrackCard';
+import { Track } from '@/types/index';
 
 export default function FreshRnbPage() {
-  const [tracks, setTracks] = useState<Track[]>([]);
+  const [tracks, setTracks] = useState<Track[]>([]); // Use imported Track type
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const { playTrack } = useAudio();
   const PLAYLIST_ID = '2021225582'; // Fresh RnB Playlist ID
 
   useEffect(() => {
@@ -112,20 +20,34 @@ export default function FreshRnbPage() {
       setLoading(true);
       setError(null);
       try {
-        // Fetch from the Deezer playlist endpoint
-        const response = await fetch(`/api/deezer/playlist/${PLAYLIST_ID}?limit=50`); // Fetch more for the full page
+        const response = await fetch(`/api/deezer/playlist/${PLAYLIST_ID}?limit=50`);
         if (!response.ok) {
           throw new Error(`Failed to fetch Fresh RnB playlist: ${response.statusText}`);
         }
         const data = await response.json();
         
-        // Check the data structure (assuming tracks are in data.tracks or data directly)
-        const trackData = data?.tracks || data || [];
-         if (Array.isArray(trackData)) {
-             setTracks(trackData.map((t: any) => ({ // Basic transformation, enhance as needed
-               ...t,
-               duration_ms: t.duration * 1000 || 0
-            })));
+        // Ensure data structure and map to shared Track type
+        const trackData = data?.tracks?.data || data?.data || []; // Deezer API often has tracks under data.tracks.data or data.data
+        
+        if (Array.isArray(trackData)) {
+             // Map Deezer structure to shared Track structure
+             const formattedTracks: Track[] = trackData.map((t: any) => ({
+               id: t.id.toString(), // Ensure ID is string
+               name: t.title_short || t.title, // Prefer short title
+               title: t.title, // Keep original title if needed
+               artists: t.contributors?.map((a: any) => ({ name: a.name })) || (t.artist ? [{ name: t.artist.name }] : []), // Handle contributors or single artist
+               album: {
+                 id: t.album?.id?.toString(),
+                 name: t.album?.title,
+                 images: t.album?.cover_medium ? [{ url: t.album.cover_medium }] : [], // Use cover_medium for image
+                 cover_medium: t.album?.cover_medium, // Keep Deezer specific field if needed elsewhere
+               },
+               duration: t.duration, // Duration in seconds from Deezer
+               duration_ms: t.duration ? t.duration * 1000 : undefined, // Calculate ms
+               preview: t.preview, // Deezer preview URL
+               preview_url: t.preview, // Map to shared preview_url
+            }));
+            setTracks(formattedTracks);
         } else {
             console.error("Invalid track data format:", data);
              throw new Error('Invalid data format received for Fresh RnB tracks');
@@ -141,15 +63,6 @@ export default function FreshRnbPage() {
 
     fetchTracks();
   }, []);
-
-  const handlePlayTrack = (track: Track) => {
-    if (track.preview_url) {
-      playTrack({ ...track, previewUrl: track.preview_url });
-    } else {
-      console.log("No preview available for this track.");
-      // Optionally show a toast message
-    }
-  };
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-[#1f1f1f] to-[#121212] text-white">
@@ -181,10 +94,10 @@ export default function FreshRnbPage() {
          )}
 
         {!loading && !error && (
-          <div className="space-y-3">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-1 gap-3"> 
             {tracks.length > 0 ? (
               tracks.map((track, index) => (
-                <TrackListItem key={track.id || index} track={track} index={index} onPlay={handlePlayTrack} />
+                <TrackCard key={track.id || index} track={track} />
               ))
             ) : (
                 <p className="text-center text-gray-400 py-10">No tracks found in this playlist.</p>

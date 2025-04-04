@@ -7,6 +7,7 @@ import { getServerSession } from 'next-auth/next';
 import { authOptions } from '@/lib/auth';
 import '@fontsource/henny-penny';
 import Notifications from './components/Notifications';
+import MiniPlayer from './components/MiniPlayer';
 
 const figtree = Figtree({ subsets: ['latin'] });
 const inter = Inter({ subsets: ['latin'], variable: '--font-inter' });
@@ -56,6 +57,7 @@ export default async function RootLayout({
           <Notifications />
           <Providers>
             {children}
+            <MiniPlayer />
           </Providers>
         </AuthProvider>
       </body>

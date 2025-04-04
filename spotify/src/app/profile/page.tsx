@@ -15,6 +15,19 @@ import MoodManager from '../components/MoodManager';
 import { PlaceholderImage } from "../components/PlaceholderImage";
 import { HomeIcon, StarIcon, ChatBubbleLeftRightIcon, QueueListIcon } from '@heroicons/react/24/solid';
 
+// Define TABS constant
+const TABS = {
+  OVERVIEW: 'overview',
+  ALBUMS: 'albums',
+  TRACKS: 'tracks',
+  RATINGS: 'ratings',
+  STATS: 'stats',
+  MOODS: 'moods'
+} as const; // Use 'as const' for stricter typing
+
+// Define a type for the valid tab values
+type TabKey = typeof TABS[keyof typeof TABS];
+
 type SpotifyApi = {
   getMe: () => Promise<{ body: UserProfile }>;
   getUserPlaylists: (userId: string) => Promise<{ body: { items: Playlist[] } }>;
@@ -733,29 +746,13 @@ const CreateMoodModal = ({ show, onClose, onSave }: {
 };
 
 // --- Tab Constants ---
-const TABS = {
-  OVERVIEW: 'Overview',
-  RATINGS: 'Ratings',
-  REVIEWS: 'Reviews',
-  PLAYLISTS: 'Playlists',
-  MOODS: 'Moods',
-  ALBUMS: 'Albums', // Added back
-  TRACKS: 'Tracks', // Added back
-  STATS: 'Stats',   // Added back
-  // LIKED_SONGS: 'Liked Songs',
-  // SAVED_ALBUMS: 'Saved Albums',
-  // FOLLOWING: 'Following',
-};
-
 const tabConfig = [
   { name: TABS.OVERVIEW, icon: <HomeIcon className="h-5 w-5" /> },
+  { name: TABS.ALBUMS, icon: <QueueListIcon className="h-5 w-5" /> }, // Placeholder icon
+  { name: TABS.TRACKS, icon: <QueueListIcon className="h-5 w-5" /> }, // Placeholder icon
   { name: TABS.RATINGS, icon: <StarIcon className="h-5 w-5" /> },
-  { name: TABS.REVIEWS, icon: <ChatBubbleLeftRightIcon className="h-5 w-5" /> },
-  { name: TABS.PLAYLISTS, icon: <QueueListIcon className="h-5 w-5" /> },
+  { name: TABS.STATS, icon: <ChatBubbleLeftRightIcon className="h-5 w-5" /> }, // Placeholder icon
   { name: TABS.MOODS, icon: <div className="h-5 w-5">😊</div> }, // Simple emoji icon
-  // { name: TABS.LIKED_SONGS, icon: <HeartIcon className="h-5 w-5" /> },
-  // { name: TABS.SAVED_ALBUMS, icon: <BookmarkSquareIcon className="h-5 w-5" /> },
-  // { name: TABS.FOLLOWING, icon: <UsersIcon className="h-5 w-5" /> },
 ];
 
 // --- Existing Profile Page Component --- 
@@ -781,8 +778,8 @@ export default function Profile() {
   const [loadingRecentlyPlayed, setLoadingRecentlyPlayed] = useState(true);
   const [loadingPlaylists, setLoadingPlaylists] = useState(true);
   
-  // Tab state
-  const [activeTab, setActiveTab] = useState(TABS.OVERVIEW);
+  // Tab state - Use the TabKey type
+  const [activeTab, setActiveTab] = useState<TabKey>(TABS.OVERVIEW);
   
   // Add state for user ratings
   const [userRatings, setUserRatings] = useState<any[]>([]);
@@ -823,8 +820,9 @@ export default function Profile() {
   // Set active tab from URL parameter
   useEffect(() => {
     const tabParam = searchParams.get('tab');
-    if (tabParam && ['overview', 'albums', 'tracks', 'stats', 'ratings', 'moods'].includes(tabParam)) {
-      setActiveTab(tabParam);
+    // Check if tabParam is a valid TabKey
+    if (tabParam && Object.values(TABS).includes(tabParam as TabKey)) {
+      setActiveTab(tabParam as TabKey);
     }
   }, [searchParams]);
   
@@ -986,15 +984,15 @@ export default function Profile() {
     }
   }, [session, status, router]);
   
-  // Fetch ratings whenever the active tab changes to ratings
+  // Fetch ratings whenever the active tab changes to ratings (use TABS constant)
   useEffect(() => {
-    if (activeTab === 'ratings') {
+    if (activeTab === TABS.RATINGS) { // Use TABS constant
       console.log('Ratings tab activated, fetching user ratings');
       fetchUserRatings();
     }
   }, [activeTab, session]);
 
-  // Modified render function for the profile page content
+  // Modified render function for the profile page content (use TABS constant)
   const renderContent = () => {
     switch (activeTab) {
       case TABS.OVERVIEW:
@@ -1003,14 +1001,14 @@ export default function Profile() {
         return renderAlbumsContent();
       case TABS.TRACKS:
         return renderTracksContent();
-      case TABS.RATINGS:
+      case TABS.RATINGS: // Use TABS constant
         return renderRatingsContent();
       case TABS.STATS:
         return renderStatsContent();
       case TABS.MOODS:
         return renderMoodsContent();
       default:
-        return renderOverviewContent();
+        return renderOverviewContent(); // Default case
     }
   };
   
@@ -1035,7 +1033,7 @@ export default function Profile() {
         {savedAlbums.length > 0 && (
           <div className="mt-4">
             <button 
-              onClick={() => setActiveTab('albums')}
+              onClick={() => setActiveTab(TABS.ALBUMS)}
               className="text-sm text-[#1DB954] hover:underline"
             >
               View all saved albums
@@ -1545,7 +1543,7 @@ export default function Profile() {
                   </div>
         </div>
                 
-        {/* Profile Tabs */}
+        {/* Profile Tabs (onClick should already be using TABS) */}
         <div className="border-b border-gray-800 mb-8">
           <div className="flex overflow-x-auto no-scrollbar">
                   <button
@@ -1567,7 +1565,7 @@ export default function Profile() {
               Tracks
             </button>
             <button 
-              onClick={() => setActiveTab(TABS.RATINGS)}
+              onClick={() => setActiveTab(TABS.RATINGS)} // Use TABS constant
               className={`px-6 py-3 text-sm font-medium whitespace-nowrap border-b-2 ${activeTab === TABS.RATINGS ? 'border-[#1DB954] text-white' : 'border-transparent text-gray-400 hover:text-white'}`}
             >
               Ratings

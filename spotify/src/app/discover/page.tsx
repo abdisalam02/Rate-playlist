@@ -1,59 +1,19 @@
 'use client';
 
-import React, { useState, useEffect, Suspense } from 'react';
+import { useState, useEffect, Suspense } from 'react';
 import { useSession } from 'next-auth/react';
 import Link from 'next/link';
 import Navbar from '@/app/components/Navbar';
-import { motion } from 'framer-motion';
 import TokenRefresher from '@/app/components/TokenRefresher';
-import SectionHeader from '@/app/components/SectionHeader';
 import TrackCard from '@/app/components/TrackCard';
-import AlbumCard from '@/app/components/AlbumCard';
-import TrackSection from '@/app/components/TrackSection';
-import AlbumSection from '@/app/components/AlbumSection';
+import { Album, Track } from '@/types/index'; // Use shared types
+import { useRouter } from 'next/navigation';
+import Image from 'next/image';
+import { motion } from 'framer-motion';
 import { useAudio } from '@/app/providers';
-import { DeezerTrack, DeezerAlbum } from '@/app/types/deezer';
-import SpotifySearch from '@/app/components/SpotifySearch';
-
-// --- TYPE DEFINITIONS ---
-interface Album {
-  id: string | number;
-  spotify_id?: string | null; // Keep spotify_id for type consistency if used elsewhere
-  name: string; 
-  images?: { url: string }[];
-  artists?: { id?: string | number; name: string }[];
-  release_date?: string; 
-}
-
-interface Track {
-  id: string;
-  name: string;
-  artists: Array<{ name: string }>;
-  album: {
-    name: string;
-    images: Array<{ url: string }>;
-  };
-  duration_ms: number;
-  playlist_id?: string; // Legacy?
-  playlist_name?: string; // Legacy?
-  source_playlist?: { id: string; name: string }; // Preferred source info
-}
-
-interface UserRecommendation {
-  id: string;
-  userId: string;
-  userName: string;
-  userImage: string;
-  title: string;
-  description: string;
-  items: Array<{
-    id: string;
-    type: string;
-    name: string;
-    artists: Array<{ name: string }>;
-    image: string;
-  }>;
-}
+// Remove unused/incorrect imports
+// import { processAlbumImages, InlineAlbumCard } from '@/app/components/InlineAlbumCard'; 
+// import { processTrackImages } from '@/utils/imageProcessing'; 
 
 // --- HELPER FUNCTIONS ---
 
@@ -104,335 +64,405 @@ const buildApiUrl = (basePath: string, params: Record<string, any> = {}) => {
   return url;
 };
 
-// --- COMPONENT DEFINITIONS ---
+// --- Helper Functions to Fetch Data --- 
 
-// --- MAIN DISCOVER PAGE COMPONENT ---
-export default function Discover() {
-  const { data: session, status: sessionStatus } = useSession();
-  const { playTrack } = useAudio();
-  
-  // State variables - using Deezer names where applicable
-  const [newReleases, setNewReleases] = useState<Album[]>([]);
-  const [chartAlbums, setChartAlbums] = useState<Album[]>([]);
-  const [chartTracks, setChartTracks] = useState<Track[]>([]);
-  const [editorialPlaylistTracks, setEditorialPlaylistTracks] = useState<Track[]>([]);
-  const [featuredPlaylistTracks, setFeaturedPlaylistTracks] = useState<Track[]>([]);
-  const [freshRapTracks, setFreshRapTracks] = useState<Track[]>([]);
-  const [freshRnbTracks, setFreshRnbTracks] = useState<Track[]>([]);
-  
-  const [loadingReleases, setLoadingReleases] = useState(true);
-  const [loadingChartAlbums, setLoadingChartAlbums] = useState(true);
-  const [loadingChartTracks, setLoadingChartTracks] = useState(true);
-  const [loadingEditorialTracks, setLoadingEditorialTracks] = useState(true);
-  const [loadingFeaturedPlaylist, setLoadingFeaturedPlaylist] = useState(true);
-  const [loadingFreshRap, setLoadingFreshRap] = useState(true);
-  const [loadingFreshRnb, setLoadingFreshRnb] = useState(true);
-  
-  const [errorReleases, setErrorReleases] = useState<string | null>(null);
-  const [errorChartAlbums, setErrorChartAlbums] = useState<string | null>(null);
-  const [errorChartTracks, setErrorChartTracks] = useState<string | null>(null);
-  const [errorEditorialTracks, setErrorEditorialTracks] = useState<string | null>(null);
-  const [errorFeaturedPlaylist, setErrorFeaturedPlaylist] = useState<string | null>(null);
-  const [errorFreshRap, setErrorFreshRap] = useState<string | null>(null);
-  const [errorFreshRnb, setErrorFreshRnb] = useState<string | null>(null);
+// Helper to fetch Deezer Playlist and format tracks
+async function fetchAndFormatDeezerPlaylist(playlistId: string, limit: number, playlistName: string): Promise<Track[]> {
+  console.log(`FRONTEND: Fetching from: /api/deezer/playlist/${playlistId}?limit=${limit}`);
+  const response = await fetch(`/api/deezer/playlist/${playlistId}?limit=${limit}`);
+  if (!response.ok) {
+    throw new Error(`Failed to fetch ${playlistName} playlist: ${response.statusText}`);
+  }
+  const data = await response.json();
 
-  const [featuredTracks, setFeaturedTracks] = useState<DeezerTrack[]>([]);
-  const [loadingFeatured, setLoadingFeatured] = useState(true);
-  const [errorFeatured, setErrorFeatured] = useState<string | null>(null);
+  // Playlist API returns { tracks: { data: [...] } }
+  const rawTracks = data?.tracks?.data;
 
-  const [currentHits, setCurrentHits] = useState<DeezerTrack[]>([]);
-  const [loadingCurrentHits, setLoadingCurrentHits] = useState(true);
-  const [errorCurrentHits, setErrorCurrentHits] = useState<string | null>(null);
+  if (!Array.isArray(rawTracks)) {
+    console.error(`Invalid data format (${playlistName})`, data);
+    throw new Error(`Invalid data format (${playlistName})`);
+  }
 
-  const processTrackImages = (tracks: Track[]): Track[] => {
-    return tracks.map(track => ({
-      ...track,
-      album: {
-        ...(track.album || { name: 'Unknown Album', images: [] }), // Add fallback for album
-        images: (track.album?.images || []).map(img => ({
-          ...img,
-          url: processImageUrl(img.url)
-        }))
-      }
-    }));
-  };
+  console.log(`FRONTEND: Received ${rawTracks.length} tracks for ${playlistName}.`);
 
-  const processAlbumImages = (albums: Album[]): Album[] => {
-    return albums.map(album => ({
-      ...album,
-      images: (album.images || []).map(img => ({ // Add fallback for images array
-        ...img,
-        url: processImageUrl(img.url)
-      }))
-    }));
-  };
-  
-  useEffect(() => {
-    console.log("Discover Page: useEffect triggered. Session status:", sessionStatus);
-    
-    // Fetch all the Deezer-based data
-    fetchDeezerFeaturedPlaylist();
-    fetchDeezerChartTracks();
-    fetchFreshRapPlaylist();
-    fetchFreshRnbPlaylist();
-    
-    // User Recommendations are removed for now
-    // if (session && session.user) {
-    //   fetchUserRecommendations(); 
-    // }
+  // Map raw Deezer track to shared Track type
+  return rawTracks.map((t: any): Track => ({
+    id: t.id.toString(),
+    name: t.title_short || t.title,
+    title: t.title,
+    artists: t.contributors?.map((a: any) => ({ name: a.name })) || (t.artist ? [{ name: t.artist.name }] : []),
+    album: {
+      id: t.album?.id?.toString(),
+      name: t.album?.title,
+      images: [{ url: t.album?.cover_medium || t.album?.cover || '/placeholder-album.png' }], 
+      cover_medium: t.album?.cover_medium, 
+    },
+    duration: t.duration,
+    duration_ms: t.duration ? t.duration * 1000 : undefined,
+    preview: t.preview,
+    preview_url: t.preview, 
+    explicit: t.explicit_lyrics, 
+  }));
+}
 
-  }, [session, sessionStatus]); // Dependency array
-  
-  // --- LOADING SKELETONS ---
-  const renderCardSkeletons = (count: number, type: 'album' | 'track' = 'album') => {
-    return Array(count).fill(0).map((_, i) => (
-       <div key={`skel-${type}-${i}`} className={`bg-gradient-to-br from-[#222222] to-[#181818] rounded-xl p-${type === 'album' ? 4 : 3} animate-pulse ${type === 'track' ? 'flex items-center gap-3' : ''}`}>
-        {type === 'album' ? (
-           <>
-        <div className="aspect-square mb-4 bg-gray-700 rounded-lg"></div>
-            <div className="h-4 bg-gray-700 rounded w-3/4 mb-2"></div>
-            <div className="h-3 bg-gray-700 rounded w-1/2"></div>
-          </>
-        ) : (
-          <>
-             <div className="w-12 h-12 bg-gray-700 rounded-md flex-shrink-0"></div>
-             <div className="flex-1">
-                <div className="h-4 bg-gray-700 rounded w-3/4 mb-2"></div>
-                <div className="h-3 bg-gray-700 rounded w-1/2"></div>
-             </div>
-             <div className="w-10 h-3 bg-gray-700 rounded ml-2 flex-shrink-0"></div>
-          </>
-        )}
-      </div>
-    ));
-  };
-  
-  // --- ERROR DISPLAY COMPONENT ---
-  const ErrorDisplay = ({ message }: { message: string | null }) => {
-      if (!message) return null;
-      // Simple inline display for errors
-      return ( <p className="text-red-400 text-sm italic my-2 text-center">{message}</p> );
-  };
+// Fetch Featured Playlist (Deezer - Example: Fresh Pop Mix)
+async function fetchDeezerFeaturedPlaylist(): Promise<Track[]> {
+    const PLAYLIST_ID = '6682665064';
+    const LIMIT = 6;
+    return fetchAndFormatDeezerPlaylist(PLAYLIST_ID, LIMIT, "Deezer Featured Playlist (Fresh Pop Mix)");
+}
 
-  // --- Fetch Deezer Featured Playlist (Fresh Pop) ---
-  const fetchDeezerFeaturedPlaylist = async () => {
-    setLoadingFeaturedPlaylist(true); setErrorFeaturedPlaylist(null);
-    const playlistId = '2228601362'; // Fresh Pop ID
+// Reusable function to fetch Deezer Chart Tracks
+async function fetchDeezerChartTracks(limit: number = 5): Promise<Track[]> {
+    const apiUrl = `/api/deezer/chart/tracks?limit=${limit}`;
+    console.log(`FRONTEND (Discover): Fetching Deezer Chart Tracks from: ${apiUrl}`);
     try {
-      const apiUrl = buildApiUrl(`/api/deezer/playlist/${playlistId}`, { limit: 5 });
-      const response = await fetch(apiUrl);
-      if (!response.ok) throw new Error(`API Error: ${response.status}`);
-      const data = await response.json();
-      const tracks = data?.tracks || data || [];
-      if (Array.isArray(tracks)) setFeaturedPlaylistTracks(processTrackImages(tracks));
-      else throw new Error('Invalid data format');
-    } catch (err: any) {
-      console.error('FRONTEND: Error fetching Deezer featured playlist:', err);
-      setErrorFeaturedPlaylist(err.message || 'Failed to load featured playlist');
-      setFeaturedPlaylistTracks([]);
-    } finally {
-      setLoadingFeaturedPlaylist(false);
-    }
-  };
+        const response = await fetch(apiUrl, { cache: 'no-store' });
+        console.log(`FRONTEND (Discover): Deezer Chart Tracks Response Status: ${response.status}`);
+        if (!response.ok) {
+            console.error(`FRONTEND (Discover): Failed to fetch Deezer chart tracks: ${response.status}`);
+            return [];
+        }
+        const data = await response.json();
+        console.log(`FRONTEND (Discover): Received Deezer Chart Tracks Data:`, data);
+        
+        // *** CORRECTED DATA ACCESS ***
+        const tracksData = data?.tracks?.data; // Access nested 'data' array
 
-  // --- Fetch Deezer Chart Albums ---
-  const fetchDeezerChartAlbums = async () => {
-    setLoadingChartAlbums(true); setErrorChartAlbums(null);
-    try {
-      const apiUrl = buildApiUrl('/api/deezer/chart/albums', { limit: 3 });
-      const response = await fetch(apiUrl);
-      if (!response.ok) throw new Error(`API Error: ${response.status}`);
-      const data = await response.json();
-      const albums = data?.albums || data || [];
-      if (Array.isArray(albums)) setChartAlbums(processAlbumImages(albums));
-      else throw new Error('Invalid data format');
+        if (!Array.isArray(tracksData)) {
+            console.error("FRONTEND (Discover): Invalid data format (Deezer Chart)", data);
+            return [];
+        }
+
+        // Adapt to Deezer API structure
+        const tracks = tracksData.map((item: any): Track => ({
+            id: item.id?.toString() ?? Math.random().toString(),
+            name: item.title ?? 'Unknown Track',
+            artists: item.artist ? [{ id: item.artist.id?.toString(), name: item.artist.name }] : [],
+            album: {
+                id: item.album?.id?.toString(),
+                name: item.album?.title,
+                images: item.album?.cover_medium ? [{ url: item.album.cover_medium, height: 300, width: 300 }] : [], // Use cover_medium
+            },
+            duration_ms: item.duration ? item.duration * 1000 : undefined,
+            preview_url: item.preview || null,
+        }));
+        console.log(`FRONTEND (Discover): Received ${tracks.length} chart tracks.`);
+        return tracks;
     } catch (error) {
-       console.error('FRONTEND: Error fetching Deezer chart albums:', error);
-       setErrorChartAlbums(`Failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
-       setChartAlbums([]);
-    } finally { setLoadingChartAlbums(false); }
-  };
-
-  // --- Fetch Deezer Chart Tracks ---
-  const fetchDeezerChartTracks = async () => {
-    setLoadingChartTracks(true); setErrorChartTracks(null);
-    try {
-      const apiUrl = buildApiUrl('/api/deezer/chart/tracks', { limit: 5 });
-      console.log("FRONTEND: Fetching Deezer Chart Tracks from:", apiUrl);
-      const response = await fetch(apiUrl);
-      console.log(`FRONTEND: Deezer Chart Tracks Response Status: ${response.status}`);
-      if (!response.ok) throw new Error(`API Error: ${response.status}`);
-      const data = await response.json();
-      console.log("FRONTEND: Received Deezer Chart Tracks Data:", data);
-      const tracks = data?.tracks || data || [];
-      if (Array.isArray(tracks)) {
-        setChartTracks(processTrackImages(tracks));
-      } else {
-         throw new Error('Invalid data format for chart tracks');
-      }
-    } catch (error) {
-      console.error('FRONTEND: Error fetching Deezer chart tracks:', error);
-      setErrorChartTracks(`Failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
-      setChartTracks([]);
-    } finally { setLoadingChartTracks(false); }
-  };
-
-  // --- Fetch Fresh Rap Playlist ---
-  const fetchFreshRapPlaylist = async () => {
-    setLoadingFreshRap(true); setErrorFreshRap(null);
-    const playlistId = '6682665064'; // Fresh Rap ID
-    try {
-      const apiUrl = buildApiUrl(`/api/deezer/playlist/${playlistId}`, { limit: 6 }); // Fetch 6 for the grid
-      const response = await fetch(apiUrl);
-      if (!response.ok) throw new Error(`API Error (Fresh Rap): ${response.status}`);
-      const data = await response.json();
-      const tracks = data?.tracks || data || [];
-      if (Array.isArray(tracks)) setFreshRapTracks(processTrackImages(tracks));
-      else throw new Error('Invalid data format (Fresh Rap)');
-    } catch (err: any) {
-      console.error('FRONTEND: Error fetching Fresh Rap playlist:', err);
-      setErrorFreshRap(err.message || 'Failed to load Fresh Rap playlist');
-      setFreshRapTracks([]);
-    } finally { setLoadingFreshRap(false); }
-  };
-
-  // --- Fetch Fresh RnB Playlist ---
-  const fetchFreshRnbPlaylist = async () => {
-    setLoadingFreshRnb(true); setErrorFreshRnb(null);
-    const playlistId = '2021225582'; // Fresh RnB ID
-    try {
-      const apiUrl = buildApiUrl(`/api/deezer/playlist/${playlistId}`, { limit: 5 }); // Fetch 5 for the list
-      const response = await fetch(apiUrl);
-      if (!response.ok) throw new Error(`API Error (Fresh RnB): ${response.status}`);
-      const data = await response.json();
-      const tracks = data?.tracks || data || [];
-      if (Array.isArray(tracks)) setFreshRnbTracks(processTrackImages(tracks));
-      else throw new Error('Invalid data format (Fresh RnB)');
-    } catch (err: any) {
-      console.error('FRONTEND: Error fetching Fresh RnB playlist:', err);
-      setErrorFreshRnb(err.message || 'Failed to load Fresh RnB playlist');
-      setFreshRnbTracks([]);
-    } finally { setLoadingFreshRnb(false); }
-  };
-
-  const handlePlayTrack = (track: DeezerTrack) => {
-    if (track.preview) {
-      playTrack({ 
-        id: String(track.id),
-        name: track.title || 'Unknown Track',
-        preview_url: track.preview, 
-        artists: track.contributors?.map((c: { name: string }) => ({ name: c.name })) || (track.artist ? [{ name: track.artist.name }] : []),
-        album: track.album ? { name: track.album.title, images: [{ url: track.album.cover_medium || ''}] } : undefined
-      });
-    } else {
-      console.log("No preview available for this track.");
+        console.error(`FRONTEND (Discover): Error fetching Deezer chart tracks:`, error);
+        return [];
     }
-  };
+}
 
-  // --- MAIN JSX STRUCTURE ---
+// Fetch Fresh Rap (Deezer Playlist)
+async function fetchFreshRapPlaylist(): Promise<Track[]> {
+    const PLAYLIST_ID = '2228601362';
+    const LIMIT = 5;
+    return fetchAndFormatDeezerPlaylist(PLAYLIST_ID, LIMIT, "Fresh Rap");
+}
+
+// Fetch Fresh RnB (Deezer Playlist)
+async function fetchFreshRnbPlaylist(): Promise<Track[]> {
+    const PLAYLIST_ID = '2021225582'; // Fresh RnB ID
+    const LIMIT = 5;
+    return fetchAndFormatDeezerPlaylist(PLAYLIST_ID, LIMIT, "Fresh RnB");
+}
+
+// --- Search Result Types ---
+interface SearchResults {
+    tracks?: { items: Track[] };
+    albums?: { items: Album[] };
+    artists?: { items: any[] }; // Add artists later if needed
+}
+
+// --- Simple Album Card for Search Results ---
+function SearchAlbumCard({ album }: { album: Album }) {
+    const imageUrl = album.images?.[0]?.url || 'https://placehold.co/300x300/1DB954/FFFFFF?text=Album';
+    const releaseYear = album.release_date ? new Date(album.release_date).getFullYear() : null;
   return (
-    <div className="min-h-screen bg-gradient-to-b from-[#121212] to-[#1a1a1a] text-white">
-      <TokenRefresher />
-      <Navbar />
-      
-      {/* Hero Section */}
-      <div className="w-full bg-gradient-to-r from-[#1DB954]/30 via-[#1a1a1a]/50 to-[#121212] pt-28 pb-16 px-4 md:px-8">
-         <div className="container mx-auto max-w-7xl">
-          <motion.h1 
-            initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5 }}
-            className="text-4xl md:text-5xl lg:text-6xl font-extrabold mb-4 text-white tracking-tight"
-          >
-            Discover <span className="text-[#1DB954]">Your Next Favorite</span>
-          </motion.h1>
-          <motion.p
-             initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5, delay: 0.2 }}
-             className="text-gray-300 mb-6 max-w-3xl text-base md:text-lg lg:text-xl"
-          >
-            Explore fresh releases, trending tracks, top charts, and community picks curated just for you.
-          </motion.p>
+        <div className="bg-[#181818] hover:bg-[#282828] transition rounded-lg overflow-hidden h-full flex flex-col">
+            <Link href={`/album/${album.id}`} className="block p-3 flex flex-col h-full">
+                <div className="aspect-square mb-3 overflow-hidden rounded-md relative">
+                    <Image 
+              src={imageUrl}
+              alt={album.name || 'Album cover'}
+                        fill
+                        sizes="(max-width: 640px) 100vw, (max-width: 1024px) 33vw, 25vw"
+                        className="object-cover"
+                        onError={(e: any) => { e.target.src = 'https://placehold.co/300x300/1DB954/FFFFFF?text=Album'; }}
+                    />
+              </div>
+                <div className="flex-1">
+                    <h3 className="font-bold text-sm text-white truncate" title={album.name}>{album.name}</h3>
+                    <p className="text-neutral-400 text-xs truncate" title={album.artists?.map(a => a.name).join(', ')}>
+                {releaseYear ? `${releaseYear} • ` : ''}{album.artists?.map(a => a.name).join(', ') || 'Various Artists'}
+              </p>
+                </div>
+            </Link>
         </div>
-      </div>
-      
-      {/* Main Content Area */}
-      <div className="container mx-auto max-w-7xl px-4 md:px-8 py-8 md:py-12">
+    );
+}
 
-        {/* --- Add the SpotifySearch component here --- */} 
-        <SpotifySearch /> 
+// --- Search Input Component (Modified) ---
+interface SearchBarProps {
+    onSearchSubmit: (query: string) => void;
+    initialQuery?: string; // To potentially persist query if needed
+}
+function SearchBar({ onSearchSubmit, initialQuery = '' }: SearchBarProps) {
+    const [query, setQuery] = useState(initialQuery);
 
-        {/* Featured Playlist Section (Fresh Pop) */}
-        <section className="mb-10 md:mb-16">
-          <SectionHeader title="Fresh Pop Mix" viewAllLink="/discover/home-featured-tracks" />
-           {loadingFeaturedPlaylist ? (
-            <div className="space-y-3">{renderCardSkeletons(5, 'track')}</div>
-          ) : errorFeaturedPlaylist ? (
-             <ErrorDisplay message={errorFeaturedPlaylist} />
-          ) : featuredPlaylistTracks.length > 0 ? (
-            <div className="space-y-3">
-              {featuredPlaylistTracks.map(track => ( <TrackCard key={`featured-${track.id}`} track={track} /> ))} 
+    const handleSearch = (e: React.FormEvent) => {
+        e.preventDefault();
+        onSearchSubmit(query);
+    };
+
+    return (
+        <form onSubmit={handleSearch} className="relative mb-8">
+            <input
+                type="text"
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                placeholder="Search for tracks, albums, artists..."
+                className="w-full px-4 py-3 pr-10 bg-[#2a2a2a] text-white rounded-full border border-transparent focus:outline-none focus:ring-2 focus:ring-[#1DB954] focus:border-transparent placeholder-neutral-500 text-sm"
+            />
+            <button 
+                type="submit"
+                className="absolute right-3 top-1/2 transform -translate-y-1/2 p-1.5 text-neutral-400 hover:text-white transition-colors"
+            >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path>
+                </svg>
+            </button>
+        </form>
+    );
+}
+
+// Loading spinner (can be reused)
+function SimpleLoadingSpinner({ message = 'Loading...' }: { message?: string }) {
+  return (
+    <div className="w-full h-64 flex flex-col items-center justify-center text-neutral-400">
+      <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-[#1DB954] mb-4"></div>
+      <p>{message}</p>
+    </div>
+  );
+}
+
+// --- Discover Component (Modified) ---
+export default function Discover() {
+    const { data: session, status } = useSession();
+    
+    // State for default Discover content
+    const [featuredPlaylist, setFeaturedPlaylist] = useState<Track[]>([]);
+    const [topTracks, setTopTracks] = useState<Track[]>([]);
+    const [freshRap, setFreshRap] = useState<Track[]>([]);
+    const [freshRnb, setFreshRnb] = useState<Track[]>([]);
+    const [loadingFeatured, setLoadingFeatured] = useState(true);
+    const [errorFeatured, setErrorFeatured] = useState<string | null>(null);
+    const [loadingTop, setLoadingTop] = useState(true);
+    const [errorTop, setErrorTop] = useState<string | null>(null);
+    const [loadingRap, setLoadingRap] = useState(true);
+    const [errorRap, setErrorRap] = useState<string | null>(null);
+    const [loadingRnb, setLoadingRnb] = useState(true);
+    const [errorRnb, setErrorRnb] = useState<string | null>(null);
+    
+    // State for Search
+    const [searchQuery, setSearchQuery] = useState<string>('');
+    const [searchResults, setSearchResults] = useState<SearchResults | null>(null);
+    const [isSearchLoading, setIsSearchLoading] = useState<boolean>(false);
+    const [searchError, setSearchError] = useState<string | null>(null);
+
+    // Fetch initial discover data (playlists, charts)
+    useEffect(() => {
+        const loadInitialData = async () => {
+            console.log("Discover: Fetching initial data...");
+            setLoadingFeatured(true); setLoadingTop(true); setLoadingRap(true); setLoadingRnb(true);
+            try {
+                const [featuredData, topData, rapData, rnbData] = await Promise.all([
+                    fetchDeezerFeaturedPlaylist(),
+                    fetchDeezerChartTracks(),
+                    fetchFreshRapPlaylist(),
+                    fetchFreshRnbPlaylist()
+                ]);
+                setFeaturedPlaylist(featuredData);
+                setTopTracks(topData);
+                setFreshRap(rapData);
+                setFreshRnb(rnbData);
+            } catch (error) {
+                console.error("Discover: Error fetching initial data:", error);
+                // Set individual errors or a general error message
+                setErrorFeatured('Failed to load featured playlist.');
+                setErrorTop('Failed to load top tracks.');
+                setErrorRap('Failed to load fresh rap.');
+                setErrorRnb('Failed to load fresh RnB.');
+            } finally {
+                setLoadingFeatured(false); setLoadingTop(false); setLoadingRap(false); setLoadingRnb(false);
+                console.log("Discover: Initial data fetch complete.");
+            }
+        };
+        // Only fetch if not searching
+        if (!searchQuery) {
+            loadInitialData();
+        }
+    }, [searchQuery]); // Refetch if searchQuery becomes empty
+
+    // Fetch search results when searchQuery changes
+    useEffect(() => {
+        if (searchQuery) {
+            const fetchResults = async () => {
+                setIsSearchLoading(true);
+                setSearchError(null);
+                setSearchResults(null); // Clear previous results
+                try {
+                    const response = await fetch(`/api/spotify/search?q=${encodeURIComponent(searchQuery)}&type=track,album&limit=12`);
+                    if (!response.ok) {
+                        throw new Error(`Search failed: ${response.statusText}`);
+                    }
+                    const data: SearchResults = await response.json();
+                    console.log("Search results received:", data);
+                    setSearchResults(data);
+                } catch (err) {
+                    console.error("Error fetching search results:", err);
+                    setSearchError(err instanceof Error ? err.message : 'An unknown search error occurred');
+                } finally {
+                    setIsSearchLoading(false);
+                }
+            };
+            fetchResults();
+        }
+    }, [searchQuery]);
+
+    const handleSearchSubmit = (query: string) => {
+        setSearchQuery(query);
+        // Clear default content when starting a search
+        if (query) {
+             setFeaturedPlaylist([]);
+             setTopTracks([]);
+             setFreshRap([]);
+             setFreshRnb([]);
+        }
+    };
+    
+    const clearSearch = () => {
+        setSearchQuery('');
+        setSearchResults(null);
+        setIsSearchLoading(false);
+        setSearchError(null);
+        // Refetching of default content will happen via the first useEffect
+    };
+
+    // --- Render Helper for default sections ---
+    const renderTrackSection = (title: string, tracks: Track[], viewAllLink: string, loading: boolean, error: string | null) => (
+        <section className="mb-12">
+            <div className="flex justify-between items-center mb-4">
+                <h2 className="text-2xl font-bold text-white">{title}</h2>
+                {!loading && !error && tracks.length > 0 && (
+                    <Link href={viewAllLink} className="text-sm font-semibold text-neutral-400 hover:text-white hover:underline">
+                        View all
+                    </Link>
+                )}
             </div>
-          ) : ( <p className="text-gray-500 italic">Could not load Fresh Pop playlist.</p> )} 
+            {loading && <p className="text-neutral-400">Loading {title.toLowerCase()}...</p>}
+            {error && <p className="text-red-500">Error loading {title.toLowerCase()}: {error}</p>}
+            {!loading && !error && tracks.length === 0 && <p className="text-neutral-400">No {title.toLowerCase()} available right now.</p>}
+            {!loading && !error && tracks.length > 0 && (
+                <div className="grid grid-cols-1 gap-3">
+                    {tracks.map((track) => (
+                        <TrackCard key={track.id} track={track} />
+                    ))}
+                </div>
+            )}
         </section>
-
-        {/* Main Grid */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 md:gap-12 mb-12">
-          {/* Left Column (Wider) */}
-          <div className="lg:col-span-2 space-y-10 md:space-y-16">
-
-            {/* Deezer Chart Tracks Section */}
-            <section>
-              <SectionHeader title="Today's Top Tracks" viewAllLink="/discover/current-hits" />
-               {loadingChartTracks ? ( <div className="space-y-3">{renderCardSkeletons(5, 'track')}</div> ) :
-                errorChartTracks ? ( <ErrorDisplay message={errorChartTracks} /> ) :
-                chartTracks.length > 0 ? ( 
-                <div className="space-y-3">
-                    {/* Removed source display <p className="text-xs text-green-500">Source: {popularTracksSource} ({chartTracks.length} tracks)</p> */}
-                    {chartTracks.map(track => (<TrackCard key={`popular-${track.id}`} track={track} />))} 
+    );
+    
+    // --- Render Helper for search result sections ---
+    const renderSearchResults = () => (
+        <div className="mt-8 space-y-12">
+            <div className="flex justify-between items-center mb-4">
+                <h2 className="text-2xl font-bold">Search Results for "{searchQuery}"</h2>
+                <button 
+                    onClick={clearSearch} 
+                    className="text-sm text-neutral-400 hover:text-white hover:underline">
+                    Clear Search
+                </button>
                 </div>
-                ) :
-                ( <p className="text-gray-500 italic">Couldn't load top tracks chart.</p> )} 
-            </section>
             
-            {/* Fresh Rap Section (Replaces New Releases) */}
-            <section>
-              <SectionHeader title="Fresh Rap" viewAllLink="/discover/fresh-rap" />
-              {loadingFreshRap ? ( <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 md:gap-6">{renderCardSkeletons(6, 'track')}</div> ) :
-               errorFreshRap ? ( <ErrorDisplay message={errorFreshRap} /> ) :
-               freshRapTracks.length > 0 ? ( <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 md:gap-6">{freshRapTracks.map(track => (<TrackCard key={`rap-${track.id}`} track={track} />))}</div> ) : 
-               ( <p className="text-gray-500 italic">Couldn't load Fresh Rap playlist.</p> )} 
-            </section>
+            {isSearchLoading && <SimpleLoadingSpinner message="Searching..." />}
+            {searchError && <p className="text-red-500 text-center mt-8">Error searching: {searchError}</p>}
+
+            {!isSearchLoading && !searchError && !searchResults && (
+                <p className="text-neutral-500 text-center mt-8">No results found.</p>
+            )}
             
-             {/* Fresh RnB Section (Replaces Hits of the Moment) */}
+            {searchResults && (
+                <>
+                    {/* Tracks */}
+                    {searchResults.tracks && searchResults.tracks.items.length > 0 && (
+                        <section>
+                            <h3 className="text-xl font-semibold mb-4">Tracks</h3>
+                            {/* Using grid layout similar to search page */}
+                            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+                                {searchResults.tracks.items.map((track) => (
+                                    <TrackCard key={`search-${track.id}`} track={track} />
+                                ))}
+                            </div>
+                        </section>
+                    )}
+
+                    {/* Albums */}
+                    {searchResults.albums && searchResults.albums.items.length > 0 && (
             <section>
-              <SectionHeader title="Fresh RnB" viewAllLink="/discover/fresh-rnb" /> 
-               {loadingFreshRnb ? ( <div className="space-y-3">{renderCardSkeletons(5, 'track')}</div> ) :
-                errorFreshRnb ? ( <ErrorDisplay message={errorFreshRnb} /> ) :
-                freshRnbTracks.length > 0 ? ( <div className="space-y-3">{freshRnbTracks.map(track => (<TrackCard key={`rnb-${track.id}`} track={track} />))}</div> ) : 
-                ( <p className="text-gray-500 italic">Couldn't load Fresh RnB playlist.</p> )} 
+                            <h3 className="text-xl font-semibold mb-4">Albums</h3>
+                            {/* Using grid layout similar to search page */}
+                            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4">
+                                {searchResults.albums.items.map((album) => (
+                                    <SearchAlbumCard key={`search-${album.id}`} album={album} />
+                                ))}
+                            </div>
             </section>
+                    )}
+
+                    {/* No results message */}
+                    {searchResults.tracks?.items.length === 0 && searchResults.albums?.items.length === 0 && (
+                        <p className="text-neutral-500 text-center mt-8">No matching tracks or albums found.</p>
+                    )}
+                </>
+            )}
           </div>
-          
-          {/* Right Column (Sidebar) */}
-          <div className="space-y-10 md:space-y-16">
-            {/* --- COMMENTING OUT THE ENTIRE TOP ALBUMS SECTION --- */}
-            {/* 
-            <section>
-              <SectionHeader title="Top Albums" viewAllLink="/discover/popular-albums" /> 
-               {loadingTopAlbums ? ( <div className="grid grid-cols-1 gap-4 md:gap-6">{renderCardSkeletons(3, 'album')}</div> ) :
-                errorTopAlbums ? ( <ErrorDisplay message={errorTopAlbums} /> ) :
-                topAlbums.length > 0 ? ( 
-                  <div className="grid grid-cols-1 gap-4 md:gap-6">
-                    {topAlbums.map(album => (<AlbumCard key={`pop-album-${album.id}`} album={album} />))} 
+    );
+
+    // --- Main Render ---
+    return (
+        <div className="min-h-screen bg-gradient-to-b from-[#1f1f1f] to-[#121212] text-white">
+            <TokenRefresher />
+            <Navbar />
+            <main className="pt-20 pb-20 px-6 max-w-7xl mx-auto">
+                <div className="mb-12">
+                    <h1 className="text-4xl font-bold mb-2">Discover</h1>
+                    <p className="text-neutral-400">Explore new music or search for tracks, albums, and artists.</p>
                 </div>
-                ) :
-                ( <p className="text-gray-500 italic">Couldn't load top albums chart.</p> )} 
-            </section>
-            */}
-            
-            {/* Community Picks Section - REMOVED */}
-          </div>
-        </div>
-      </div>
+
+                <SearchBar onSearchSubmit={handleSearchSubmit} initialQuery={searchQuery} />
+
+                {/* Wrap content in Suspense */}
+                <Suspense fallback={<SimpleLoadingSpinner message="Loading discover content..." />}>
+                    {searchQuery ? (
+                        renderSearchResults()
+                    ) : (
+                        // Check if initial loading is complete before rendering default sections
+                        loadingFeatured || loadingTop || loadingRap || loadingRnb ? (
+                            <SimpleLoadingSpinner message="Loading discover sections..." />
+                        ) : (
+                            <>
+                                {renderTrackSection("Featured Playlist", featuredPlaylist, "/discover/featured-playlists", false, errorFeatured)}
+                                {renderTrackSection("Today's Top Tracks", topTracks, "/discover/current-hits", false, errorTop)}
+                                {renderTrackSection("Fresh Rap", freshRap, "/discover/fresh-rap", false, errorRap)}
+                                {renderTrackSection("Fresh RnB", freshRnb, "/discover/fresh-rnb", false, errorRnb)}
+                            </>
+                        )
+                    )}
+                </Suspense>
+            </main>
     </div>
   );
 } 
-// --- END OF FILE /app/discover/page.tsx ---

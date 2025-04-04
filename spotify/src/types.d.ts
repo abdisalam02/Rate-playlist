@@ -26,6 +26,9 @@ export type Track = {
     images: Array<{ url: string }>;
   };
   userRating?: number;
+  preview_url: string | null;
+  average_rating?: number;
+  rating_count?: number;
 };
 
 export type Mood = {

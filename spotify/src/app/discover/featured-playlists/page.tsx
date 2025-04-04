@@ -1,111 +1,108 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import { useSession } from "next-auth/react";
-import Navbar from '@/app/components/Navbar';
+import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
-import { motion } from 'framer-motion';
+import Navbar from '@/app/components/Navbar';
+import TokenRefresher from '@/app/components/TokenRefresher';
+import TrackCard from '@/app/components/TrackCard';
+import { Track } from '@/types/index';
 
-interface Playlist {
-  id: string;
-  name: string;
-  description: string;
-  images: Array<{ url: string }>;
-  owner: {
-    display_name: string;
-  };
-}
-
-function PlaylistCard({ playlist, index }: { playlist: Playlist; index: number }) {
-  return (
-    <motion.div
-      initial={{ opacity: 0, y: 20 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.4, delay: index * 0.05 }}
-      className="group"
-    >
-      <Link href={`/playlist/${playlist.id}`} className="block">
-        <div className="aspect-square rounded-md overflow-hidden mb-3">
-          <img
-            src={playlist.images?.[0]?.url || '/placeholder.png'}
-            alt={playlist.name}
-            className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-          />
-        </div>
-        <h3 className="font-medium truncate">{playlist.name}</h3>
-        <p className="text-sm text-gray-400 truncate">By {playlist.owner?.display_name}</p>
-        <p className="text-xs text-gray-500 mt-1 line-clamp-2">{playlist.description}</p>
-      </Link>
-    </motion.div>
-  );
-}
-
-export default function FeaturedPlaylists() {
-  const { data: session } = useSession();
-  const [playlists, setPlaylists] = useState<Playlist[]>([]);
-  const [message, setMessage] = useState('');
+export default function FeaturedPlaylistsPage() {
+  const [tracks, setTracks] = useState<Track[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const PLAYLIST_ID = '6682665064';
+  const PLAYLIST_NAME = "Fresh Pop Mix";
 
   useEffect(() => {
-    const fetchPlaylists = async () => {
+    const fetchTracks = async () => {
+      setLoading(true);
+      setError(null);
       try {
-        setLoading(true);
-        const res = await fetch('/api/discover/featured-playlists');
-        if (!res.ok) throw new Error('Failed to fetch featured playlists');
+        const response = await fetch(`/api/deezer/playlist/${PLAYLIST_ID}?limit=50`);
+        if (!response.ok) {
+          throw new Error(`Failed to fetch ${PLAYLIST_NAME} playlist: ${response.statusText}`);
+        }
+        const data = await response.json();
         
-        const data = await res.json();
-        setMessage(data.message || 'Featured Playlists');
-        setPlaylists(data.playlists?.items || []);
-        setLoading(false);
-      } catch (err) {
-        console.error(err);
-        setError(err instanceof Error ? err.message : 'An error occurred');
+        const rawTracks = data?.tracks?.data;
+
+         if (!Array.isArray(rawTracks)) {
+             console.error(`Invalid track data format (${PLAYLIST_NAME}):`, data);
+             throw new Error(`Invalid data format received for ${PLAYLIST_NAME} tracks`);
+         }
+
+         const formattedTracks: Track[] = rawTracks.map((t: any): Track => ({
+            id: t.id.toString(), 
+            name: t.title_short || t.title,
+            title: t.title,
+            artists: t.contributors?.map((a: any) => ({ name: a.name })) || (t.artist ? [{ name: t.artist.name }] : []),
+            album: {
+              id: t.album?.id?.toString(),
+              name: t.album?.title,
+              images: [{ url: t.album?.cover_medium || t.album?.cover || '/placeholder-album.png' }],
+              cover_medium: t.album?.cover_medium,
+            },
+            duration: t.duration,
+            duration_ms: t.duration ? t.duration * 1000 : undefined,
+            preview: t.preview,
+            preview_url: t.preview,
+            explicit: t.explicit_lyrics,
+         }));
+         setTracks(formattedTracks);
+
+      } catch (err: any) {
+        console.error(`Error fetching ${PLAYLIST_NAME} tracks:`, err);
+        setError(err.message || 'Failed to load tracks');
+      } finally {
         setLoading(false);
       }
     };
 
-    fetchPlaylists();
-  }, []);
+    fetchTracks();
+  }, [PLAYLIST_ID, PLAYLIST_NAME]);
 
   return (
-    <div className="min-h-screen bg-[#121212]">
+    <div className="min-h-screen bg-gradient-to-b from-[#1f1f1f] to-[#121212] text-white">
+      <TokenRefresher />
       <Navbar />
-      
-      <div className="container mx-auto px-4 py-8 pt-20">
-        <div className="mb-8">
-          <h1 className="text-3xl md:text-4xl font-bold mb-2">{message || 'Featured Playlists'}</h1>
-          <p className="text-gray-400">Curated playlists featured on Spotify</p>
+      <main className="pt-20 pb-20 px-6 max-w-7xl mx-auto">
+        <div className="flex items-center mb-8">
+          <Link 
+            href="/discover" 
+            className="flex items-center bg-black bg-opacity-40 hover:bg-opacity-60 transition rounded-full p-2 mr-4"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+              <path fillRule="evenodd" d="M12.707 5.293a1 1 0 010 1.414L9.414 10l3.293 3.293a1 1 0 01-1.414 1.414l-4-4a1 1 0 010-1.414l4-4a1 1 0 011.414 0z" clipRule="evenodd" />
+            </svg>
+          </Link>
+          <h1 className="text-3xl font-bold">{PLAYLIST_NAME}</h1>
         </div>
-        
-        {loading ? (
-          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-6">
-            {[...Array(20)].map((_, i) => (
-              <div key={i} className="animate-pulse">
-                <div className="aspect-square bg-gray-800 rounded-md mb-3"></div>
-                <div className="h-4 bg-gray-800 rounded w-3/4 mb-2"></div>
-                <div className="h-3 bg-gray-800 rounded w-1/2"></div>
-              </div>
-            ))}
-          </div>
-        ) : error ? (
-          <div className="bg-red-900/20 border border-red-900 p-4 rounded-md">
-            <p>Error: {error}</p>
-            <button 
-              onClick={() => window.location.reload()} 
-              className="mt-2 bg-red-900 text-white px-4 py-2 rounded-md hover:bg-red-800"
-            >
-              Try Again
-            </button>
-          </div>
-        ) : (
-          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-6">
-            {playlists.map((playlist, index) => (
-              <PlaylistCard key={playlist.id} playlist={playlist} index={index} />
-            ))}
+
+        {loading && (
+          <div className="flex justify-center items-center h-64">
+            <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-[#1DB954]"></div>
           </div>
         )}
-      </div>
+        
+        {error && (
+             <div className="bg-red-900/20 border border-red-800 p-4 rounded-lg text-center">
+                 <p className="text-red-300">Error loading tracks: {error}</p>
+             </div>
+         )}
+
+        {!loading && !error && (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-1 gap-3"> 
+            {tracks.length > 0 ? (
+              tracks.map((track, index) => (
+                <TrackCard key={track.id || index} track={track} />
+              ))
+            ) : (
+                <p className="text-center text-gray-400 py-10">No tracks found in this playlist.</p>
+            )}
+          </div>
+        )}
+      </main>
     </div>
   );
 } 

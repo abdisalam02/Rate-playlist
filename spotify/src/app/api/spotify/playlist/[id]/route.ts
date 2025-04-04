@@ -3,6 +3,7 @@ import { getServerSession } from 'next-auth/next';
 import { authOptions } from '@/lib/auth';
 // import { getClientCredentialsToken } from '@/lib/spotifyAuth'; // Assuming this is correct but commenting out for now
 // import { getMockPlaylistById } from '@/app/api/utils/mockUtils'; // Assuming this is correct but commenting out for now
+import { getPlaylist } from '@/lib/spotify';
 
 // Enable CORS for all origins
 function getCorsHeaders(request: NextRequest) {
@@ -28,18 +29,20 @@ export const revalidate = 0;
 export const maxDuration = 10;
 
 // Define the expected shape of the context containing params
-interface RouteContext {
-  params: {
-    id?: string; // Make id optional to handle cases where it might be missing
-  };
-}
+// interface RouteContext {
+//   params: {
+//     id?: string; // Make id optional to handle cases where it might be missing
+//   };
+// }
 
 // --- Main GET Handler ---
-export async function GET(request: NextRequest, context) {
+export async function GET(
+  request: NextRequest,
+  { params }: { params: { id: string } }
+) {
   console.log('[API Playlist] GET called');
 
-  // Destructure id directly from the context object passed as the second argument
-  const id = context.params?.id;
+  const id = params.id;
 
   // Check if ID is present
   if (!id) {

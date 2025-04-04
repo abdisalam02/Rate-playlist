@@ -305,24 +305,28 @@ export default function AlbumDetail() {
   }, [id, session, status]);
   
   // Submit rating and review
-  const handleRatingSubmit = async (e) => {
+  const handleRatingSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     
+    // Use the album ID from the fetched album state
+    const itemIdToSubmit = album?.id; 
+
     if (!session) {
-      router.push('/login');
+      console.warn("User not logged in, cannot submit rating.");
       return;
     }
     
+    if (!itemIdToSubmit) {
+      console.error("Cannot submit rating: Album ID is missing from state.");
+      alert("Error: Could not determine album ID.");
+      return;
+    }
+
     try {
       setIsSubmitting(true);
+      console.log("Submitting album rating for ID:", itemIdToSubmit);
       
-      // The userRating from the StarRating component is on a 0-10 scale
-      // But the API expects a 0-5 scale, so we need to convert it
-      if (typeof userRating !== 'number' || userRating < 0 || userRating > 10) {
-        throw new Error('Invalid rating value');
-      }
-      
-      // Convert from 0-10 scale to 0-5 scale
+      // Convert rating from UI scale (0-10) to API scale (0-5)
       const apiRating = userRating / 2;
       
       const response = await fetch('/api/ratings', {
@@ -331,58 +335,39 @@ export default function AlbumDetail() {
           'Content-Type': 'application/json',
           'Cache-Control': 'no-cache'
         },
-        credentials: 'include',
         body: JSON.stringify({
-          itemId: id,
+          itemId: itemIdToSubmit, // *** USE ALBUM ID FROM STATE ***
           itemType: 'album',
-          rating: apiRating, // Send the converted rating to the API
+          rating: apiRating,
           review: userReview
-        }),
-        cache: 'no-store',
+        })
       });
       
       if (!response.ok) {
-        const errorData = await response.json().catch(() => null);
-        const errorMessage = errorData?.error || await response.text();
-        console.error("Rating submission failed:", errorMessage);
-        throw new Error(`Failed to submit rating: ${errorMessage}`);
+        throw new Error('Failed to submit rating');
       }
       
-      // Update the UI
       const result = await response.json();
       console.log("Rating submitted:", result);
       
-      // Show success message
       setSuccessMessage("Your rating has been saved!");
       setShowSuccess(true);
       setTimeout(() => setShowSuccess(false), 3000);
       
-      // Refresh average rating
-      const avgResponse = await fetch(`/api/ratings/average?itemId=${id}&itemType=album`, {
-        credentials: 'include',
-        cache: 'no-store',
-        headers: {
-          'Cache-Control': 'no-cache'
-        }
-      });
-      
+      // Refresh average rating and community ratings
+      const avgResponse = await fetch(`/api/ratings/average?itemId=${itemIdToSubmit}&itemType=album`);
       if (avgResponse.ok) {
         const avgData = await avgResponse.json();
         setAverageRating(avgData.average ? avgData.average * 2 : 0);
         setRatingCount(avgData.count || 0);
       }
       
-      // Refresh community ratings
-      const ratingsResponse = await fetch(`/api/ratings/item?itemId=${id}&itemType=album&limit=10`, {
-        credentials: 'include'
-      });
-      
+      const ratingsResponse = await fetch(`/api/ratings/item?itemId=${itemIdToSubmit}&itemType=album&limit=10`);
       if (ratingsResponse.ok) {
         const ratingsData = await ratingsResponse.json();
-        // Convert community ratings from API scale (0-5) to UI scale (0-10)
-        const convertedRatings = (ratingsData.ratings || []).map((rating) => ({
+         const convertedRatings = (ratingsData.ratings || []).map((rating: any) => ({
           ...rating,
-          rating: rating.rating * 2 // Convert from 0-5 to 0-10 scale
+          rating: rating.rating * 2 // Convert scale for display
         }));
         setCommunityRatings(convertedRatings);
       }

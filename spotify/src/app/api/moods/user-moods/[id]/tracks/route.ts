@@ -5,6 +5,7 @@ import { getUserMoodTracks, getMoodTracks, addTrackToUserMood } from '@/lib/supa
 import { getUserId } from '@/lib/session';
 import { checkDbConnection, checkTableExists } from '@/lib/db-status';
 import { supabase } from '@/lib/supabase';
+import { enrichItems } from '@/lib/enrichUtils';
 
 /**
  * Helper function to create standardized API responses
@@ -23,6 +24,46 @@ function createApiResponse(success: boolean, data: any = null, message: string =
     }
   });
 }
+
+/**
+ * Helper function to get client credentials token (copied from user API route)
+ */
+async function getClientCredentialsToken() {
+    console.log('[getClientCredentialsToken] Attempting to get token...');
+    try {
+      const clientId = process.env.SPOTIFY_CLIENT_ID;
+      const clientSecret = process.env.SPOTIFY_CLIENT_SECRET;
+      
+      if (!clientId || !clientSecret) {
+        console.error('[getClientCredentialsToken] Missing SPOTIFY_CLIENT_ID or SPOTIFY_CLIENT_SECRET');
+        return null;
+      }
+      
+      const response = await fetch('https://accounts.spotify.com/api/token', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded',
+          'Authorization': `Basic ${Buffer.from(`${clientId}:${clientSecret}`).toString('base64')}`
+        },
+        body: new URLSearchParams({
+          grant_type: 'client_credentials'
+        }),
+        cache: 'no-store' // Ensure fresh request
+      });
+      
+      const responseBody = await response.text();
+      if (!response.ok) {
+        console.error(`[getClientCredentialsToken] Failed: ${response.status}`, responseBody);
+        return null;
+      }
+      const data = JSON.parse(responseBody);
+      console.log('[getClientCredentialsToken] Successfully received token.');
+      return data.access_token;
+    } catch (error) {
+      console.error('[getClientCredentialsToken] Error during fetch:', error);
+      return null;
+    }
+  }
 
 /**
  * GET handler for /api/moods/user-moods/[id]/tracks
@@ -96,7 +137,7 @@ export async function GET(
     }
     
     // Get user ID
-    const userId = await getUserId();
+    let userId = await getUserId();
     console.log('Retrieved user ID for GET mood tracks:', userId);
     
     // For development mode, use a fallback user ID if needed
@@ -132,45 +173,51 @@ export async function GET(
         allTracks.forEach(track => {
           console.log(`- Track ID: ${track.track_id}, Name: ${track.track_name}, User ID: ${track.user_id}`);
         });
-        
-        // In development, return all tracks regardless of user ID
-        if (isDevelopment && allTracks.length > 0) {
-          console.log('Development mode: returning all tracks for testing');
-          return createApiResponse(true, allTracks);
-        }
       }
     } catch (error) {
       console.warn('Error listing all tracks for mood:', error);
     }
     
     // Fetch tracks for the specific mood and user
-    console.log(`Fetching tracks for mood ${moodId} and user ${userId}`); // Use awaited moodId
-    const { data, error } = await supabase
-      .from('mood_tracks') // Corrected table name
-      .select('*')
-      .eq('user_mood_id', moodId) // Use awaited moodId
+    console.log(`Fetching tracks for mood ${moodId} and user ${userId}`);
+    const { data: rawTracks, error } = await supabase
+      .from('mood_tracks')
+      .select('id, user_id, user_mood_id, track_id, track_name, artist_name, track_image, added_at') // Select needed fields
+      .eq('user_mood_id', moodId)
       .eq('user_id', userId)
       .order('added_at', { ascending: true });
 
     if (error) {
       console.error('Error fetching from mood_tracks:', error);
-    } else if (data && data.length > 0) {
-      console.log(`Retrieved ${data.length} tracks from mood_tracks`);
-      return createApiResponse(true, data);
+      return createApiResponse(false, null, `Error fetching mood tracks: ${error.message}`);
+    }
+
+    if (!rawTracks || rawTracks.length === 0) {
+        console.log(`No tracks found in mood_tracks for mood ${moodId}`);
+        return createApiResponse(true, []); // Return empty if none found
     }
     
-    // If no tracks found in mood_tracks, try the user_mood_tracks table
-    try {
-      console.log(`Fetching tracks from user_mood_tracks for mood ${moodId}`);
-      const tracks = await getMoodTracks(userId, moodId);
-      console.log(`Retrieved ${tracks.length} tracks from user_mood_tracks`);
-      
-      return createApiResponse(true, tracks);
-    } catch (error) {
-      console.error('Error fetching user mood tracks:', error);
-      return createApiResponse(false, null, 
-        `Error fetching user mood tracks: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    console.log(`Retrieved ${rawTracks.length} raw tracks from mood_tracks`);
+
+    // --- Enrich the tracks --- 
+    console.log(`Enriching ${rawTracks.length} mood tracks...`);
+    let accessToken = session?.accessToken;
+    if (!accessToken) {
+        console.warn("[Mood Tracks GET] No session token, attempting client credentials for enrichment.");
+        accessToken = await getClientCredentialsToken();
     }
+
+    // Prepare items for enrichment (ensure item_id exists)
+    const itemsToEnrich = rawTracks.map(track => ({ 
+        ...track, 
+        item_id: track.track_id, // Make sure enrichItems uses 'item_id'
+        item_type: 'track' 
+    }));
+
+    const enrichedTracks = await enrichItems(itemsToEnrich, 'track', accessToken);
+    console.log(`Enrichment complete. Returning ${enrichedTracks.length} enriched tracks.`);
+    
+    return createApiResponse(true, enrichedTracks);
   } catch (error) {
     console.error('Error fetching user mood tracks:', error);
     return createApiResponse(false, null, 
