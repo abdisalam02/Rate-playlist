@@ -194,7 +194,7 @@ export async function GET(request: NextRequest) {
         if (entry.image && entry.image.startsWith('http')) {
             imageUrl = entry.image;
         } else if (entry.image) {
-             console.warn(`[API Billboard Hot 100] Entry rank ${entry.rank}: Image URL "${entry.image}" is not absolute, using placeholder.`);
+            console.warn(`[API Billboard Hot 100] Entry rank ${entry.rank}: Image URL "${entry.image}" is not absolute, using placeholder.`);
         }
 
         return {

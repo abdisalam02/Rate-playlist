@@ -48,6 +48,15 @@ function MoodIcon() {
   );
 }
 
+// --- Added Favorites Icon ---
+function HeartIcon() {
+  return (
+    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M4.318 6.318a4.5 4.5 0 016.364 0L12 7.5l1.318-1.182a4.5 4.5 0 116.364 6.364L12 20.25l-7.682-7.682a4.5 4.5 0 010-6.364z"></path>
+    </svg>
+  );
+}
+
 export default function Navbar() {
   const { data: session, status } = useSession();
   const [isScrolled, setIsScrolled] = useState(false);
@@ -99,7 +108,7 @@ export default function Navbar() {
               MusicBoxd
             </Link>
             
-            {/* Desktop Navigation Links - Removed Playlists */}
+            {/* Desktop Navigation Links - Added Favorites */}
             <nav className="hidden md:flex items-center gap-6 text-sm text-neutral-300">
               <Link href="/" className="flex items-center gap-1.5 hover:text-white transition-colors">
                 <HomeIcon />
@@ -121,6 +130,13 @@ export default function Navbar() {
                 <MoodIcon />
                 <span>Moods</span>
               </Link>
+              {/* --- Added Favorites Link --- */}
+              {session && (
+                <Link href="/favorites" className="flex items-center gap-1.5 hover:text-white transition-colors">
+                   <HeartIcon />
+                   <span>Favorites</span>
+                </Link>
+              )}
             </nav>
           </div>
           
@@ -185,7 +201,7 @@ export default function Navbar() {
               </button>
             )}
             
-            {/* Mobile dropdown menu - improved version */}
+            {/* Mobile dropdown menu - Added Favorites */}
             <div className="relative md:hidden" ref={mobileMenuRef}>
               <button 
                 onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
@@ -249,6 +265,21 @@ export default function Navbar() {
                     </Link>
                   </li>
                   
+                  {/* --- Added Favorites Link --- */}
+                  {session && (
+                    <li>
+                      <Link 
+                        href="/favorites" 
+                        className="block py-3 px-5 hover:bg-neutral-700 active:bg-neutral-600 transition-colors flex items-center gap-3" 
+                        onClick={closeDropdowns}
+                      >
+                        <HeartIcon />
+                        Favorites
+                      </Link>
+                    </li>
+                  )}
+
+                  {/* --- Profile/Auth Section --- */}
                   {session ? (
                     <>
                       <div className="h-px bg-neutral-700 my-1"></div>

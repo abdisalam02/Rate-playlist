@@ -9,10 +9,12 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { useAudio } from '@/app/providers';
 import { Track } from '@/types/index';
 import { PlayIcon, PauseIcon } from '@heroicons/react/24/solid';
+import { HeartIcon as HeartIconOutline } from '@heroicons/react/24/outline';
+import { HeartIcon as HeartIconSolid } from '@heroicons/react/24/solid';
 
 // Helper function to format duration from ms to M:SS
-function formatDuration(ms: number): string {
-  if (!ms) return '0:00';
+function formatDuration(ms: number | undefined | null): string {
+  if (typeof ms !== 'number' || ms < 0) return '0:00';
   const totalSeconds = Math.floor(ms / 1000);
   const minutes = Math.floor(totalSeconds / 60);
   const seconds = totalSeconds % 60;
@@ -237,6 +239,8 @@ export default function TrackDetail() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [communityRatings, setCommunityRatings] = useState<UserRating[]>([]);
+  const [isFavorited, setIsFavorited] = useState(false);
+  const [loadingFavorite, setLoadingFavorite] = useState(true);
   
   // Determine if the current track detail page's track is the one playing globally
   const isCurrentTrackPlaying = playingTrack?.id?.toString() === track?.id?.toString() && isGlobalPlaying;
@@ -246,53 +250,71 @@ export default function TrackDetail() {
     if (!id) return;
     
     const fetchTrackData = async () => {
+      // Reset states on new ID
+      setLoading(true);
+      setLoadingFavorite(true);
+      setError(null);
+      setTrack(null);
+      setUserRating(0);
+      setUserReview('');
+      setAverageRating(0);
+      setRatingCount(0);
+      setCommunityRatings([]);
+      setIsFavorited(false); // Reset favorite status
+
       try {
-        setLoading(true);
-        
-        // Fetch from the consolidated tracks endpoint
-        const trackRes = await fetch(`/api/tracks/${id}`); 
+        // Use Promise.all to fetch in parallel
+        const [trackRes, ratingsRes, commRatingsRes, userRatingRes, favoriteStatusRes] = await Promise.all([
+          fetch(`/api/tracks/${id}`), 
+          fetch(`/api/ratings/average?itemId=${id}&itemType=track`), 
+          fetch(`/api/ratings/item?itemId=${id}&itemType=track&limit=10`), 
+          session ? fetch(`/api/ratings?itemId=${id}&type=track`) : Promise.resolve(null), // Fetch user rating only if logged in
+          session ? fetch(`/api/favorites/status?trackId=${id}`) : Promise.resolve(null) // Fetch favorite status only if logged in
+        ]);
+
+        // Handle Track Data
         if (!trackRes.ok) {
-           const errorBody = await trackRes.text();
-           console.error(`Failed API fetch for track ${id}: ${trackRes.status}`, errorBody);
+          const errorBody = await trackRes.text();
+          console.error(`Failed API fetch for track ${id}: ${trackRes.status}`, errorBody);
           throw new Error(`Failed to fetch track data: ${trackRes.statusText}`);
         }
-        
         const trackData: Track = await trackRes.json();
-        console.log("Fetched Track Data:", trackData); // Log to check preview_url
+        console.log("Fetched Track Data:", trackData);
         setTrack(trackData);
-        
-        // Fetch user's rating if logged in
-        if (session && session.user && session.user.id) {
-          const userRatingRes = await fetch(`/api/ratings?itemId=${id}&type=track`);
-          if (userRatingRes.ok) {
-            const userRatingData = await userRatingRes.json();
-            if (userRatingData.rating) {
-              // Convert from API scale (0-5) to UI scale (0-10)
-              setUserRating(userRatingData.rating * 2);
-              setUserReview(userRatingData.review || '');
-            }
-          }
-        }
-        
-        // Fetch community ratings
-        const ratingsRes = await fetch(`/api/ratings/average?itemId=${id}&itemType=track`);
+
+        // Handle Average Ratings
         if (ratingsRes.ok) {
           const ratingsData = await ratingsRes.json();
-          // Convert from API scale (0-5) to UI scale (0-10)
           setAverageRating(ratingsData.average ? ratingsData.average * 2 : 0);
           setRatingCount(ratingsData.count || 0);
         }
-        
-        // Get community ratings
-        const commRatingsRes = await fetch(`/api/ratings/item?itemId=${id}&itemType=track&limit=10`);
+
+        // Handle Community Ratings
         if (commRatingsRes.ok) {
           const ratingsData = await commRatingsRes.json();
-          // Convert community ratings from API scale (0-5) to UI scale (0-10)
           const convertedRatings: UserRating[] = (ratingsData.ratings || []).map((rating: UserRating) => ({
             ...rating,
-            rating: rating.rating * 2 // Convert from 0-5 to 0-10 scale
+            rating: rating.rating * 2
           }));
           setCommunityRatings(convertedRatings);
+        }
+
+        // Handle User Rating (if fetched)
+        if (userRatingRes && userRatingRes.ok) {
+          const userRatingData = await userRatingRes.json();
+          if (userRatingData.rating) {
+            setUserRating(userRatingData.rating * 2);
+            setUserReview(userRatingData.review || '');
+          }
+        }
+
+        // Handle Favorite Status (if fetched)
+        if (favoriteStatusRes && favoriteStatusRes.ok) {
+           const favData = await favoriteStatusRes.json();
+           setIsFavorited(favData.isFavorited === true);
+           console.log(`Track ${id} favorite status: ${favData.isFavorited}`);
+        } else if (favoriteStatusRes && !favoriteStatusRes.ok) {
+            console.warn(`Failed to fetch favorite status for track ${id}: ${favoriteStatusRes.status}`);
         }
 
       } catch (error) {
@@ -300,16 +322,15 @@ export default function TrackDetail() {
         setError(error instanceof Error ? error.message : "An unknown error occurred");
       } finally {
         setLoading(false);
+        setLoadingFavorite(false); // Mark favorite loading as done
       }
     };
     
     fetchTrackData();
-  }, [id, session]);
+  // Include session?.user?.id in dependencies to refetch favorite status if user logs in/out
+  }, [id, session?.user?.id]); 
   
-  // Fetch community ratings & user's rating/favorite status
-  useEffect(() => {
-    // ... existing community fetch logic ...
-  }, [id, session?.user?.id]);
+  // Removed redundant useEffect for community ratings/favorites
 
   // Submit rating and review
   const handleRatingSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
@@ -433,6 +454,44 @@ export default function TrackDetail() {
     });
   };
 
+  const handleToggleFavorite = async () => {
+    if (!session || !track) return;
+    if (loadingFavorite) return; // Prevent double clicks
+
+    const currentIsFavorited = isFavorited; // Store current state for optimistic update
+    setLoadingFavorite(true); // Indicate loading
+    // Optimistic UI update
+    setIsFavorited(!currentIsFavorited); 
+
+    try {
+      const response = await fetch('/api/favorites', {
+        method: currentIsFavorited ? 'DELETE' : 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ trackId: track.id }),
+      });
+
+      if (!response.ok) {
+        // Revert optimistic update on failure
+        setIsFavorited(currentIsFavorited); 
+        const errorData = await response.json().catch(() => ({ error: 'Failed to update favorite status' }));
+        console.error("Favorite toggle failed:", errorData);
+        // Add user feedback (e.g., toast)
+        alert(`Error: ${errorData.error || 'Could not update favorite status.'}`);
+      } else {
+         // Success - UI already updated optimistically
+         console.log(`Track ${currentIsFavorited ? 'removed from' : 'added to'} favorites`);
+          // Optional: Show success feedback (e.g., toast)
+      }
+    } catch (error) {
+      // Revert optimistic update on network error
+      setIsFavorited(currentIsFavorited); 
+      console.error("Error toggling favorite:", error);
+      alert('An error occurred. Please try again.');
+    } finally {
+       setLoadingFavorite(false); // Finish loading
+    }
+  };
+
   if (loading) {
     return <div className="flex justify-center items-center min-h-screen bg-gradient-to-b from-[#1f1f1f] to-[#121212] text-white">Loading...</div>;
   }
@@ -445,7 +504,7 @@ export default function TrackDetail() {
     return <div className="flex justify-center items-center min-h-screen bg-gradient-to-b from-[#1f1f1f] to-[#121212] text-white">Track not found.</div>;
   }
 
-  const imageUrl = track.album?.images?.[0]?.url || 'https://placehold.co/600x600/1DB954/FFFFFF?text=Track';
+  const imageUrl = track.album?.images?.[0]?.url || '/placeholder-album.png';
 
   return (
     <div className="bg-gradient-to-b from-[#1f1f1f] to-[#121212] min-h-screen text-white">
@@ -465,65 +524,85 @@ export default function TrackDetail() {
         </button>
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-8 md:gap-12">
-          {/* Left Column: Image, Basic Info */}
+          {/* Left Column: Image, Basic Info, Actions */}
           <div className="md:col-span-1">
-             {/* --- Image with Play Button Overlay --- */}
-            <div className="relative group aspect-square mb-6">
-              <img 
+             {/* --- Image with Play/Favorite Buttons Overlay --- */}
+            <div className="relative group aspect-square mb-6 shadow-xl">
+              <img
                 src={imageUrl}
                 alt={track.name || 'Track artwork'}
-                className="w-full h-full object-cover rounded-lg shadow-lg"
-                onError={(e) => {
-                  e.currentTarget.src = 'https://placehold.co/600x600/1DB954/FFFFFF?text=Track';
-                }}
+                className="w-full h-full object-cover rounded-lg"
+                onError={(e) => { e.currentTarget.src = '/placeholder-album.png'; }}
               />
-              {track.preview_url && (
-                <button
-                  onClick={handlePlayToggle}
-                  className="absolute inset-0 flex items-center justify-center bg-black bg-opacity-0 group-hover:bg-opacity-60 transition-opacity duration-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#1DB954]"
-                  aria-label={isCurrentTrackPlaying ? "Pause preview" : "Play preview"}
-                >
-                  <AnimatePresence initial={false} mode="wait">
-                    <motion.div
-                      key={isCurrentTrackPlaying ? 'pause' : 'play'}
-                      initial={{ opacity: 0, scale: 0.5 }}
-                      animate={{ opacity: 1, scale: 1 }}
-                      exit={{ opacity: 0, scale: 0.5 }}
-                      transition={{ duration: 0.2 }}
-                      className="text-white bg-[#1DB954] rounded-full p-3 shadow-lg opacity-0 group-hover:opacity-100 transition-opacity duration-300"
-                    >
-                      {isCurrentTrackPlaying ? (
-                        <PauseIcon className="w-8 h-8 md:w-10 md:h-10" />
-                      ) : (
-                        <PlayIcon className="w-8 h-8 md:w-10 md:h-10" />
-                      )}
-                    </motion.div>
-                  </AnimatePresence>
-                </button>
-              )}
+              {/* Overlay container for buttons */} 
+              {/* Make overlay always present but transparent by default, fades in on hover */} 
+              <div className="absolute inset-0 flex items-center justify-center bg-black bg-opacity-0 group-hover:bg-opacity-70 transition-opacity duration-300 rounded-lg">
+                {/* Favorite Button (top-right) - Always visible within container, styled on hover */}
+                <div className="absolute top-3 right-3 z-10">
+                   {/* Loader remains the same */}
+                   {loadingFavorite ? (
+                     <div className="w-10 h-10 flex items-center justify-center p-2 rounded-full bg-black/50 backdrop-blur-sm">
+                       <div className="animate-spin rounded-full h-5 w-5 border-t-2 border-b-2 border-neutral-400"></div>
+                     </div>
+                   ) : session ? (
+                     // Actual Button - visible, style changes on hover
+                     <motion.button
+                       whileTap={{ scale: 0.9 }}
+                       onClick={handleToggleFavorite}
+                       // Base visibility, backdrop for contrast, hover styles change background/text
+                       className={`p-2 rounded-full transition-all duration-200 backdrop-blur-sm bg-black/40 ${ 
+                         isFavorited ? 'text-red-500 hover:bg-red-900/50' : 'text-neutral-300 hover:text-white hover:bg-black/60'
+                       }`}
+                       aria-label={isFavorited ? 'Remove from favorites' : 'Add to favorites'}
+                     >
+                       {isFavorited ? (
+                         <HeartIconSolid className="w-6 h-6" />
+                       ) : (
+                         <HeartIconOutline className="w-6 h-6" />
+                       )}
+                     </motion.button>
+                   ) : (
+                     // Sign In Prompt - visible
+                     <button
+                       onClick={() => signIn('spotify')}
+                       className="p-2 rounded-full transition-colors text-neutral-400 bg-black/40 hover:text-white hover:bg-black/60 backdrop-blur-sm"
+                       aria-label="Sign in to favorite"
+                       title="Sign in to favorite"
+                     >
+                        <HeartIconOutline className="w-6 h-6" />
+                     </button>
+                   )}
+                </div> 
+
+                {/* Play Button (centered) - Logic remains the same, visibility tied to group hover */} 
+                {track.preview_url && (
+                  <button
+                    onClick={handlePlayToggle}
+                    className="focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-[#121212] focus:ring-[#1DB954] rounded-full relative z-0" // Play button below favorite
+                    aria-label={isCurrentTrackPlaying ? "Pause preview" : "Play preview"}
+                  >
+                    <AnimatePresence initial={false} mode="wait">
+                      <motion.div
+                        key={isCurrentTrackPlaying ? 'pause' : 'play'}
+                        initial={{ opacity: 0, scale: 0.5 }}
+                        animate={{ opacity: 1, scale: 1 }}
+                        exit={{ opacity: 0, scale: 0.5 }}
+                        transition={{ duration: 0.2 }}
+                        className="text-white bg-[#1DB954] rounded-full p-3 shadow-lg opacity-0 group-hover:opacity-100 transition-opacity duration-300 transform group-hover:scale-110"
+                      >
+                        {isCurrentTrackPlaying ? (
+                          <PauseIcon className="w-8 h-8 md:w-10 md:h-10" />
+                        ) : (
+                          <PlayIcon className="w-8 h-8 md:w-10 md:h-10" />
+                        )}
+                      </motion.div>
+                    </AnimatePresence>
+                  </button>
+                )}
+              </div> 
             </div>
             {/* --- End Image --- */}
             
-            {/* Original Play Preview Button (now redundant, consider removing or keeping as secondary) */}
-            {track.preview_url && (
-              <button 
-                onClick={handlePlayToggle}
-                className="w-full bg-[#1DB954] text-black font-bold py-3 px-4 rounded-full hover:bg-[#1ED760] transition flex items-center justify-center gap-2 mb-4"
-              >
-                 {isCurrentTrackPlaying ? (
-                   <>
-                     <PauseIcon className="w-5 h-5" /> Pause Preview
-                     <MusicWaveIndicator /> 
-                   </>
-                 ) : (
-                   <>
-                     <PlayIcon className="w-5 h-5" /> Play Preview
-                   </>
-                 )}
-              </button>
-            )}
-             {/* --- End Original Button --- */}
-
             <h1 className="text-3xl font-bold mb-2">{track.name}</h1>
             <div className="text-lg text-neutral-400 mb-4">
               {track.artists?.map((artist, index) => (
@@ -542,12 +621,28 @@ export default function TrackDetail() {
               </Link> 
               <span> • {track.album?.release_date?.substring(0, 4)}</span>
             </div>
-            <div className="text-sm text-neutral-500">
-              Duration: {formatDuration(track.duration_ms || 0)}
+            <div className="text-sm text-neutral-400 mb-4">
+              Duration: {formatDuration(track.duration_ms)}
             </div>
-          </div>
 
-          {/* Right Column: Rating, Review, Community */}
+            {/* --- Listen on Spotify Button --- */} 
+            {track.external_urls?.spotify && (
+               <a
+                  href={track.external_urls.spotify}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="w-full bg-[#1DB954] text-black font-bold py-2.5 px-4 rounded-full hover:bg-[#1ED760] transition flex items-center justify-center gap-2 text-sm shadow-md mb-6"
+               >
+                  <svg className="w-5 h-5" viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M12 0C5.4 0 0 5.4 0 12s5.4 12 12 12 12-5.4 12-12S18.66 0 12 0zm5.521 17.34c-.24.359-.66.48-1.021.24-2.82-1.74-6.36-2.101-10.561-1.141-.418.122-.779-.179-.899-.539-.12-.421.18-.78.54-.9 4.56-1.021 8.52-.6 11.64 1.32.42.18.479.659.301 1.02zm1.44-3.3c-.301.42-.841.6-1.262.3-3.239-1.98-8.159-2.58-11.939-1.38-.479.12-1.02-.12-1.14-.6-.12-.48.12-1.021.6-1.141C9.6 9.9 15 10.561 18.72 12.84c.361.181.54.78.241 1.2zm.12-3.36C15.24 8.4 8.82 8.16 5.16 9.301c-.6.179-1.2-.181-1.38-.721-.18-.601.18-1.2.72-1.381 4.26-1.26 11.28-1.02 15.721 1.621.539.3.719 1.02.419 1.56-.299.421-1.02.599-1.559.3z"/>
+                  </svg>
+                  Listen on Spotify
+               </a>
+            )}
+          </div> 
+          {/* End Left Column */} 
+
+          {/* Right Column: Rating, Review, Community */} 
           <div className="md:col-span-2">
             {/* Community Ratings Section */}
             <motion.div

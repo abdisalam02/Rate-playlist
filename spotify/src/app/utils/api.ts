@@ -1,52 +1,100 @@
 // Create a utility function for making API calls with the token
 
-export const fetchWithToken = async (url: string, accessToken: string | undefined) => {
+export const fetchWithToken = async (url: string, accessToken: string | undefined, options: RequestInit = {}): Promise<any> => {
   if (!accessToken) {
     console.error("No access token available for request to:", url);
     throw new Error("No access token available");
   }
   
-  console.log(`Making request to: ${url}`);
+  // Determine method for logging
+  const method = options.method || 'GET';
+  console.log(`[fetchWithToken] Making ${method} request to: ${url}`);
   
   try {
-    const response = await fetch(url, {
-      headers: {
-        'Authorization': `Bearer ${accessToken}`,
-        'Content-Type': 'application/json',
-        'Cache-Control': 'no-cache'
-      },
-      // Ensure we're not using cached responses
-      cache: 'no-store',
-      // Always include credentials
-      credentials: 'include'
-    });
+    // Prepare headers using Headers object for easier manipulation
+    const headers = new Headers(options.headers); // Initialize with incoming headers
+    
+    // Set defaults if not present
+    if (options.body && !headers.has('Content-Type')) {
+      headers.set('Content-Type', 'application/json');
+    }
+    if (!headers.has('Cache-Control')) {
+      headers.set('Cache-Control', 'no-cache');
+    }
+    
+    // Always set Authorization, overriding any potentially passed one
+    headers.set('Authorization', `Bearer ${accessToken}`);
 
-    // Log the response status for debugging
-    console.log(`Response from ${url}: ${response.status}`);
+    // Prepare final fetch options
+    const fetchOptions: RequestInit = {
+        ...options, // Spread incoming options (method, body, etc.)
+        headers: headers, // Use the constructed Headers object
+        cache: 'no-store', 
+    };
 
-    // Parse JSON even for error responses
-    const data = await response.json().catch(e => {
-      console.error(`Error parsing JSON from ${url}:`, e);
-      return { error: "Failed to parse response" };
-    });
+    const response = await fetch(url, fetchOptions);
 
-    if (!response.ok) {
-      console.error(`Error response from ${url} (${response.status}):`, data);
-      throw new Error(data.error || `Request failed with status ${response.status}`);
+    console.log(`[fetchWithToken] Response from ${url}: ${response.status}`);
+
+    // Handle responses with no content (e.g., successful DELETE)
+    if (response.status === 204) {
+      return { success: true }; 
     }
 
-    return data;
+    // Attempt to parse JSON, handle potential errors
+    let data;
+    try {
+        // Handle 201 Created specifically for Spotify Add Tracks success
+        if (response.status === 201 && response.headers.get('content-length') !== '0') { 
+            data = await response.json();
+        } else if (response.ok && response.headers.get('content-length') !== '0') { 
+             // Handle other successful responses with bodies (e.g., 200 OK)
+            data = await response.json();
+        } else if (response.ok) { 
+             // Handle successful responses with no body (e.g., maybe some PUTs)
+             data = { success: true };
+        } else { 
+             // Handle error responses (attempt to parse JSON body for details)
+             try {
+                 data = await response.json();
+             } catch (e) {
+                 // If JSON parsing fails on error response, use status text
+                 data = { error: response.statusText || "API Error", status: response.status };
+             }
+        }
+    } catch (e) {
+      console.error(`[fetchWithToken] Error parsing JSON from ${url}:`, e);
+      // If JSON parsing fails entirely, construct an error
+      data = { error: "Failed to parse response", status: response.status };
+       // Re-throw only if response was actually ok but parsing failed
+       if(response.ok) throw new Error("Failed to parse successful response.");
+    }
+
+    // If the response was not OK originally, throw an error with parsed details
+    if (!response.ok) {
+      console.error(`[fetchWithToken] Error response from ${url} (${response.status}):`, data);
+      // Construct a more informative error message
+      const errorMessage = data?.error?.message || data?.error || data?.message || `Request failed with status ${response.status}`;
+      const error = new Error(errorMessage);
+      (error as any).status = response.status; // Attach status code to error object
+      (error as any).details = data; // Attach full details
+      throw error;
+    }
+
+    return data; // Return parsed data for successful responses
+
   } catch (error) {
-    console.error(`Error fetching ${url}:`, error);
+    console.error(`[fetchWithToken] Error fetching ${url}:`, error);
+    // Re-throw the caught error (could be fetch network error or the error thrown above)
     throw error;
   }
 };
 
 // New function that handles all authentication scenarios with client credentials fallback
 export async function fetchWithClientFallback(url: string, session: any | null, options: any = {}) {
+  let correctedUrl = url; // Declare outside the try block
   try {
     // Fix port mismatch issues - if the URL contains localhost:3000 but we're on port 3001
-    let correctedUrl = url;
     if (typeof window !== 'undefined' && 
         url.includes('localhost:3000') && 
         window.location.port === '3001') {
@@ -147,21 +195,22 @@ export async function fetchWithClientFallback(url: string, session: any | null, 
       }
       
       throw new Error(`Failed to fetch with both session token and client credentials: ${response.status}`);
-    } catch (error: any) {
-      // Catch errors from either fetch attempt
-      console.error("Error during fetchWithClientFallback process:", error);
-      // Re-throw the error to be handled by the calling function
-      // Ensure we're throwing a standard Error object
-      if (error instanceof Error) {
-        throw error; // Re-throw original error if it's already an Error object
-      } else {
-        // Wrap other error types (like strings) in an Error object
-        throw new Error(`Fetch failed: ${error}`);
+    } catch (clientError) {
+      console.error('Error with client credentials request:', clientError);
+      
+      // Try to use mock data if we're fetching a playlist or discover endpoint
+      if (correctedUrl.includes('/playlist/')) {
+        console.log(`Attempting to get mock data for playlist endpoint after error: ${correctedUrl}`);
+        return await tryGetMockPlaylistData(correctedUrl);
+      } else if (correctedUrl.includes('/discover/')) {
+        console.log(`Attempting to get mock data for discover endpoint after error: ${correctedUrl}`);
+        return await tryGetMockDiscoverData(correctedUrl);
       }
+      
+      throw clientError; // Re-throw to be handled by the caller
     }
   } catch (error) {
-    // Use the original 'url' in this outer catch block as 'correctedUrl' might not be defined yet
-    console.error(`Error in fetchWithClientFallback for ${url}:`, error);
+    console.error(`Error in fetchWithClientFallback for ${correctedUrl || url}:`, error);
     throw error; // Re-throw to be handled by the caller
   }
 }
@@ -172,8 +221,15 @@ async function tryGetMockPlaylistData(url: string) {
   
   // Extract the playlist ID from the URL
   const urlParts = url.split('/');
-  const playlistId = urlParts[urlParts.length - 1].split('?')[0];
+  // Handle potential query params by splitting on '?'
+  const playlistIdSegment = urlParts[urlParts.length - 1];
+  const playlistId = playlistIdSegment ? playlistIdSegment.split('?')[0] : null;
   
+  if(!playlistId) {
+      console.warn("Could not extract playlist ID for mock data from URL:", url);
+      return getGenericMockPlaylist('unknown'); // Return generic if ID extraction fails
+  }
+
   // Handle 2010 Bangers playlist specifically
   if (playlistId === '357fWKFTiDhpt9C69CMG4q') {
     console.log('Using mock data for 2010 Bangers playlist');
@@ -192,28 +248,7 @@ async function tryGetMockPlaylistData(url: string) {
   }
   
   // For other playlists, return a generic mock playlist
-  return {
-    id: playlistId,
-    name: "Mock Playlist",
-    description: "This playlist data is generated when the Spotify API is unavailable",
-    images: [{ url: "/placeholder-playlist.png" }],
-    tracks: {
-      items: Array(12).fill(0).map((_, i) => ({
-        track: {
-          id: `mock-track-${i}`,
-          name: `Track ${i + 1}`,
-          artists: [{ id: `mock-artist-${i}`, name: `Mock Artist ${i + 1}` }],
-          album: {
-            id: `mock-album-${i}`,
-            name: `Album ${i + 1}`,
-            images: [{ url: "/placeholder-album.png" }]
-          },
-          preview_url: null,
-          duration_ms: 180000 + (i * 10000) // 3-4 minutes
-        }
-      }))
-    }
-  };
+  return getGenericMockPlaylist(playlistId);
 }
 
 // Mock data for R&B playlist
@@ -516,5 +551,54 @@ async function tryGetMockDiscoverData(url: string) {
       id: `mock-item-${i}`,
       name: `Item ${i + 1}`
     }))
+  };
+}
+
+// --- ADDED Basic Generic Mock Playlist Function ---
+function getGenericMockPlaylist(playlistId: string) {
+  console.log(`Generating generic mock playlist data for ID: ${playlistId}`);
+  return {
+    id: playlistId,
+    name: `Mock Playlist (${playlistId.substring(0, 5)}...)`,
+    description: "This playlist data is generated when the Spotify API is unavailable.",
+    images: [{ url: "/placeholder-playlist.png" }], // Ensure you have this placeholder image
+    tracks: {
+      href: `https://api.spotify.com/v1/playlists/${playlistId}/tracks?offset=0&limit=10`,
+      items: Array(10).fill(null).map((_, i) => ({
+        added_at: new Date().toISOString(),
+        added_by: { id: 'mock-user', type: 'user' },
+        is_local: false,
+        primary_color: null,
+        track: {
+          id: `mock-track-${playlistId}-${i}`,
+          name: `Mock Track ${i + 1}`,
+          artists: [{ id: `mock-artist-${i}`, name: `Mock Artist ${i}` }],
+          album: {
+            id: `mock-album-${i}`,
+            name: `Mock Album ${i}`,
+            images: [{ url: "/placeholder-album.png" }], // Ensure you have this placeholder image
+            release_date: "2023-01-01",
+          },
+          duration_ms: 180000 + Math.random() * 60000, // Random duration 3-4 mins
+          explicit: false,
+          external_urls: { spotify: "#" },
+          href: "#",
+          is_playable: true,
+          popularity: 50,
+          preview_url: null, // Often null
+          track_number: i + 1,
+          type: 'track',
+          uri: `spotify:track:mock-track-${playlistId}-${i}`,
+        },
+        video_thumbnail: { url: null },
+      })),
+      limit: 10,
+      next: null,
+      offset: 0,
+      previous: null,
+      total: 10,
+    },
+    type: 'playlist',
+    // Add other fields if your frontend expects them
   };
 } 

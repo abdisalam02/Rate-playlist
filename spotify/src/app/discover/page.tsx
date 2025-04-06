@@ -285,7 +285,7 @@ export default function Discover() {
                 setTopTracks(topData);
                 setFreshRap(rapData);
                 setFreshRnb(rnbData);
-            } catch (error) {
+    } catch (error) {
                 console.error("Discover: Error fetching initial data:", error);
                 // Set individual errors or a general error message
                 setErrorFeatured('Failed to load featured playlist.');
