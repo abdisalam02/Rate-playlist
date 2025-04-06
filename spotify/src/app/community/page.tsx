@@ -7,6 +7,7 @@ import Link from 'next/link';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Tab } from '@headlessui/react';
 import Image from 'next/image';
+import UserAvatar from '@/app/components/UserAvatar';
 
 // Star display component
 function StarDisplay({ rating }: { rating: number }) {
@@ -64,15 +65,12 @@ function ActivityItem({ activity }: { activity: any }) {
   return (
     <div className="border-b border-gray-700 py-4">
       <div className="flex items-start gap-3">
-        <div className="w-10 h-10 rounded-full overflow-hidden relative">
-          <Image 
-            src={activity.user_image || "/default-avatar.png"} 
-            alt={activity.user_name || "User"} 
-            fill
-            sizes="40px"
-            className="object-cover"
-          />
-        </div>
+        <UserAvatar 
+          imageUrl={activity.user_image}
+          username={activity.user_name}
+          sizeClasses="w-10 h-10"
+          textSizeClass="text-base"
+        />
         <div className="flex-1 min-w-0">
           <div className="flex items-center mb-1">
             <Link href={`/user/${activity.user_id}`} className="font-medium hover:underline truncate">
@@ -370,15 +368,12 @@ export default function Community() {
                   activeUsers.map((user) => (
                     <Link key={user.id} href={`/user/${user.id}`}>
                       <div className="flex flex-col items-center space-y-2 min-w-[100px]">
-                        <div className="w-16 h-16 mx-auto mb-2 rounded-full overflow-hidden border-2 border-gray-700 relative">
-                          <Image 
-                            src={user?.profile_image || '/default-avatar.png'} 
-                            alt={user?.display_name || 'User'} 
-                            fill
-                            sizes="64px"
-                            className="object-cover"
-                          />
-                        </div>
+                        <UserAvatar 
+                          imageUrl={user?.profile_image}
+                          username={user?.display_name}
+                          sizeClasses="w-16 h-16"
+                          textSizeClass="text-xl"
+                        />
                         <h3 className="font-medium text-sm truncate">{user?.display_name || 'User'}</h3>
                       </div>
                     </Link>

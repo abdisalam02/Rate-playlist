@@ -14,6 +14,7 @@ import { PlusCircleIcon } from '@heroicons/react/24/solid';
 import MoodManager from '../components/MoodManager';
 import { PlaceholderImage } from "../components/PlaceholderImage";
 import { HomeIcon, StarIcon, ChatBubbleLeftRightIcon, QueueListIcon } from '@heroicons/react/24/solid';
+import UserAvatar from '@/app/components/UserAvatar'; // Import UserAvatar
 
 // Define TABS constant
 const TABS = {
@@ -1508,12 +1509,13 @@ export default function Profile() {
           
           {/* Profile Info */}
           <div className="flex flex-col md:flex-row items-center md:items-end gap-4 md:gap-6 mt-[-2rem] md:mt-[-4rem] relative z-10">
-            {/* Profile Image */}
-            <div className="w-24 h-24 md:w-32 md:h-32 relative">
-              <img 
-                src={profile?.images?.[0]?.url || session?.user?.image || "/placeholder-user.png"}
-                alt={profile?.display_name || session?.user?.name || "User"}
-                className="w-full h-full rounded-full border-4 border-[#121212] object-cover"
+            {/* Profile Image - Updated to use UserAvatar */}
+            <div className="w-24 h-24 md:w-32 md:h-32 relative border-4 border-[#121212] rounded-full bg-[#282828]"> 
+              <UserAvatar 
+                imageUrl={profile?.images?.[0]?.url || session?.user?.image}
+                username={profile?.display_name || session?.user?.name}
+                sizeClasses="w-full h-full" // Ensure it fills the container
+                textSizeClass="text-4xl md:text-5xl" // Larger text for large avatar
               />
             </div>
             

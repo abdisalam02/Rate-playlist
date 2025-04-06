@@ -5,6 +5,7 @@ import { useState, useEffect, useRef } from 'react';
 import { useSession, signIn, signOut } from 'next-auth/react';
 import { motion, AnimatePresence } from 'framer-motion';
 import Image from 'next/image';
+import UserAvatar from '@/app/components/UserAvatar';
 
 // Icons for navigation
 function HomeIcon() {
@@ -50,8 +51,6 @@ function MoodIcon() {
 export default function Navbar() {
   const { data: session, status } = useSession();
   const [isScrolled, setIsScrolled] = useState(false);
-  const [userImage, setUserImage] = useState('/default-avatar.png');
-  const [userName, setUserName] = useState('');
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [profileMenuOpen, setProfileMenuOpen] = useState(false);
   const mobileMenuRef = useRef<HTMLDivElement>(null);
@@ -84,15 +83,6 @@ export default function Navbar() {
     window.addEventListener('scroll', handleScroll);
     return () => window.removeEventListener('scroll', handleScroll);
   }, []);
-
-  useEffect(() => {
-    if (session?.user) {
-      setUserName(session.user.name || 'User');
-      if (session.user.image) {
-        setUserImage(session.user.image);
-      }
-    }
-  }, [session]);
 
   const closeDropdowns = () => {
     setMobileMenuOpen(false);
@@ -144,17 +134,15 @@ export default function Navbar() {
                   onClick={() => setProfileMenuOpen(!profileMenuOpen)}
                   className="flex items-center gap-2 cursor-pointer p-1 rounded-full hover:bg-neutral-800 transition-colors"
                 >
-                  <div className="relative w-8 h-8 rounded-full overflow-hidden bg-neutral-700">
-                    <Image 
-                      src={userImage}
-                      alt="Profile" 
-                      fill
-                      sizes="32px"
-                      className="object-cover"
-                      onError={(e) => { e.currentTarget.src = '/default-avatar.png'; }}
-                    />
-                  </div>
-                  <span className="text-sm hidden lg:block font-medium mr-1">{userName}</span>
+                  <UserAvatar 
+                    imageUrl={session.user?.image}
+                    username={session.user?.name}
+                    sizeClasses="w-8 h-8"
+                    textSizeClass="text-sm"
+                  />
+                  <span className="text-sm hidden lg:block font-medium mr-1">
+                    {session.user?.name || 'User'}
+                  </span>
                   <svg className="w-4 h-4 opacity-70 hidden lg:block" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
                   </svg>

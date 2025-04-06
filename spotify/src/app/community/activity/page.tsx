@@ -6,6 +6,7 @@ import Navbar from '@/app/components/Navbar';
 import Link from 'next/link';
 import { motion } from 'framer-motion';
 import { useSearchParams } from 'next/navigation';
+import UserAvatar from '@/app/components/UserAvatar';
 
 // Carousel of active users component
 function UserCarousel() {
@@ -204,10 +205,11 @@ function UserCarousel() {
                 transition={{ duration: 0.2 }}
               >
                 <div className={`w-20 h-20 rounded-full overflow-hidden border-2 ${user.isCurrentUser ? 'border-yellow-400' : 'border-[#1DB954]'} mb-2 relative`}>
-                  <img 
-                    src={user?.profile_image || "/default-avatar.png"} 
-                    alt={user?.display_name || "User"} 
-                    className="w-full h-full object-cover"
+                  <UserAvatar 
+                    imageUrl={user?.profile_image}
+                    username={user?.display_name}
+                    sizeClasses="w-full h-full"
+                    textSizeClass="text-2xl"
                   />
                   {user.isCurrentUser && (
                     <div className="absolute inset-0 bg-black/20 flex items-center justify-center">
@@ -331,10 +333,11 @@ function ActivityItem({ activity }: { activity: any }) {
         <div className="flex items-center justify-between mb-3">
           <div className="flex items-center gap-3">
             <Link href={`/user/${activity.user_id}`}>
-              <img 
-                src={activity.user_image || "/default-avatar.png"} 
-                alt={activity.user_name} 
-                className="w-10 h-10 rounded-full object-cover border-2 border-[#1DB954]"
+              <UserAvatar 
+                imageUrl={activity.user_image}
+                username={activity.user_name}
+                sizeClasses="w-10 h-10"
+                textSizeClass="text-base"
               />
             </Link>
             <div>

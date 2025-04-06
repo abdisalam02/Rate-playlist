@@ -125,6 +125,13 @@ const nextConfig = {
         port: '',
         pathname: '/**', // Allow any path
       },
+      // Add Facebook CDN for user profile images
+      {
+        protocol: 'https',
+        hostname: 'scontent-dub4-1.xx.fbcdn.net',
+        port: '',
+        pathname: '/**', // Allow any path from this specific FB CDN host
+      },
     ]
   },
   async headers() {

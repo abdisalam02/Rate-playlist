@@ -1,59 +1,63 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabase';
-import { cookies } from 'next/headers';
 
 // GET /api/moods - Get all moods
 export async function GET(request: NextRequest) {
   const searchParams = request.nextUrl.searchParams;
-  const limit = parseInt(searchParams.get('limit') || '20');
+  const limit = parseInt(searchParams.get('limit') || '50'); // Increased default limit
   
   console.log(`Fetching all moods with limit: ${limit}`);
   
   try {
-    const cookieStore = cookies();
-    const supabase = createClient(cookieStore);
-    
-    // Fetch all unique moods from the database
-    const { data: moodsData, error: moodsError } = await supabase
-      .from('moods')
-      .select('id, mood, color, intensity, created_at, user_id, tracks:mood_tracks(track_id, track_name, artist_name, track_image)')
+    // Fetch moods, associated user display name/image, and associated tracks
+    const { data: moodsData, error: moodsError, count } = await supabase
+      .from('user_moods')
+      .select(`
+        id,
+        mood_name,
+        description,
+        created_at,
+        user_id,
+        users ( display_name, profile_image ),
+        mood_tracks ( track_image, added_at ) 
+      `, { count: 'exact' })
       .order('created_at', { ascending: false })
       .limit(limit);
     
     if (moodsError) {
-      console.error('Error fetching moods:', moodsError);
-      return getMockMoodsResponse();
+      console.error('Supabase error fetching moods:', moodsError);
+      throw moodsError;
     }
     
-    // Process moods to add sample track data if missing
-    const processedMoods = moodsData.map(mood => {
-      // Process track info if available
-      let trackInfo = null;
-      if (mood.tracks && mood.tracks.length > 0) {
-        trackInfo = mood.tracks[0]; // Get first track associated with this mood
-      }
-      
-      return {
-        id: mood.id,
-        mood: mood.mood,
-        color: mood.color || getMoodColor(mood.mood),
-        intensity: mood.intensity || 0.5,
-        user_id: mood.user_id,
-        created_at: mood.created_at,
-        track_id: trackInfo?.track_id,
-        track_name: trackInfo?.track_name,
-        artist_name: trackInfo?.artist_name,
-        track_image: trackInfo?.track_image
-      };
-    });
+    // Process data to extract display_name, profile_image and latest track image
+    const formattedMoods = moodsData?.map(mood => {
+        let latestTrackImage: string | null = null;
+        if (mood.mood_tracks && mood.mood_tracks.length > 0) {
+            const sortedTracks = [...mood.mood_tracks].sort((a, b) => 
+                new Date(b.added_at).getTime() - new Date(a.added_at).getTime()
+            );
+            latestTrackImage = sortedTracks[0]?.track_image || null;
+        }
+        
+        return {
+            id: mood.id,
+            mood_name: mood.mood_name,
+            description: mood.description,
+            created_at: mood.created_at, 
+            user_id: mood.user_id, 
+            username: mood.users?.display_name || 'Unknown User', 
+            profile_image: mood.users?.profile_image || null,
+            latest_track_image: latestTrackImage 
+        };
+    }) || [];
     
-    return NextResponse.json({ 
-      moods: processedMoods,
-      count: processedMoods.length
-    });
-  } catch (error) {
+    return NextResponse.json({ moods: formattedMoods, count: count ?? 0 });
+  } catch (error: any) {
     console.error('Error in moods API:', error);
-    return getMockMoodsResponse();
+    return NextResponse.json(
+      { error: `Failed to fetch moods: ${error.message}` },
+      { status: 500 }
+    );
   }
 }
 
