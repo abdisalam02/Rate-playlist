@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { useSession, signIn } from "next-auth/react";
 import Navbar from '@/app/components/Navbar';
@@ -9,8 +9,11 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { useAudio } from '@/app/providers';
 import { Track } from '@/types/index';
 import { PlayIcon, PauseIcon } from '@heroicons/react/24/solid';
-import { HeartIcon as HeartIconOutline } from '@heroicons/react/24/outline';
+import { HeartIcon as HeartIconOutline, PlusIcon } from '@heroicons/react/24/outline';
 import { HeartIcon as HeartIconSolid } from '@heroicons/react/24/solid';
+import { AddToPlaylistModal } from '@/app/components/modals/PlaylistModal';
+import { toast } from 'react-hot-toast';
+import Image from 'next/image';
 
 // Helper function to format duration from ms to M:SS
 function formatDuration(ms: number | undefined | null): string {
@@ -200,7 +203,7 @@ const UserRatingItem = ({ rating }: UserRatingItemProps) => {
               ) : index === fullStars && hasHalfStar ? (
                 <svg className="w-4 h-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor">
                   <path d="M12 17.27L18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21z" />
-                  <path d="M12 17.27V5" style={{ stroke: '#1f2937', strokeWidth: 6 }} />
+                  <path d="M12 17.27V2" style={{ fill: 'none', stroke: '#374151', strokeWidth: 2 }}/>
                 </svg>
               ) : (
                 <svg className="w-4 h-4 text-gray-400" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -212,7 +215,7 @@ const UserRatingItem = ({ rating }: UserRatingItemProps) => {
         </div>
       </div>
       {rating.review && (
-        <p className="text-gray-300 mt-2">{rating.review}</p>
+        <p className="text-gray-300 mt-2 text-sm">{rating.review}</p>
       )}
       <p className="text-xs text-gray-500 mt-2">
         {new Date(rating.createdAt).toLocaleDateString()}
@@ -221,8 +224,94 @@ const UserRatingItem = ({ rating }: UserRatingItemProps) => {
   );
 };
 
+// Error Display Component
+function ErrorDisplay({ message }: { message: string }) {
+  const router = useRouter();
+  return (
+    <div className="bg-[#181818] p-6 rounded-lg text-center my-10">
+      <h2 className="text-xl font-bold text-red-400 mb-2">Error Loading Track</h2>
+      <p className="text-gray-300 mb-4">{message}</p>
+      <button 
+         onClick={() => router.back()} 
+         className="mt-4 inline-block px-4 py-2 bg-[#1DB954] text-black font-medium rounded-full"
+       >
+         Go Back
+       </button>
+    </div>
+  );
+}
+
+// --- Skeleton Component --- 
+function TrackPageSkeleton() {
+  return (
+    <div className="animate-pulse">
+      {/* Back button placeholder */} 
+      <div className="h-6 w-20 bg-neutral-700 rounded mb-6"></div>
+
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-8 md:gap-12">
+        {/* Left Column Skeleton */}
+        <div className="md:col-span-1">
+          <div className="aspect-square bg-neutral-800 rounded-lg mb-6 shadow-xl"></div>
+          <div className="h-8 bg-neutral-700 rounded w-3/4 mb-3"></div>
+          <div className="h-6 bg-neutral-700 rounded w-1/2 mb-4"></div>
+          <div className="h-4 bg-neutral-700 rounded w-full mb-2"></div>
+          <div className="h-4 bg-neutral-700 rounded w-3/4 mb-4"></div>
+          <div className="h-10 bg-neutral-700 rounded-full mb-6"></div> 
+        </div>
+
+        {/* Right Column Skeleton */}
+        <div className="md:col-span-2 space-y-8">
+          {/* Community Ratings Skeleton */}
+          <div>
+            <div className="flex justify-between items-center mb-6">
+               <div className="h-7 bg-neutral-700 rounded w-1/2"></div>
+               <div className="h-9 bg-neutral-700 rounded-full w-32"></div>
+            </div>
+            <div className="space-y-4">
+              {[...Array(3)].map((_, i) => (
+                <div key={i} className="bg-[#282828] p-4 rounded-lg space-y-3">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <div className="w-8 h-8 bg-neutral-700 rounded-full"></div>
+                      <div className="h-4 bg-neutral-700 rounded w-24"></div>
+                    </div>
+                    <div className="flex gap-1">
+                      {[...Array(5)].map((_, j) => <div key={j} className="w-4 h-4 bg-neutral-700 rounded-full"></div>)}
+                    </div>
+                  </div>
+                  <div className="h-4 bg-neutral-700 rounded w-full"></div>
+                  <div className="h-4 bg-neutral-700 rounded w-3/4"></div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* User Rating Skeleton */}
+          <div className="bg-[#181818] p-6 rounded-lg space-y-4">
+            <div className="h-6 bg-neutral-700 rounded w-1/3 mb-4"></div>
+            <div className="h-8 bg-neutral-700 rounded w-1/2 mb-4"></div>
+            <div className="h-20 bg-neutral-700 rounded w-full mb-4"></div>
+            <div className="h-12 bg-neutral-700 rounded-full w-36"></div>
+          </div>
+
+           {/* Album Link Skeleton */}
+           <div className="bg-[#181818] p-4 rounded-lg">
+              <div className="flex items-center gap-4">
+                  <div className="w-16 h-16 bg-neutral-700 rounded"></div>
+                  <div className="space-y-2 flex-1">
+                      <div className="h-4 bg-neutral-700 rounded w-1/3"></div>
+                      <div className="h-5 bg-neutral-700 rounded w-2/3"></div>
+                  </div>
+              </div>
+           </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function TrackDetail() {
-  const { id } = useParams();
+  const { id: trackId } = useParams();
   const router = useRouter();
   const { data: session, status } = useSession();
   const { playTrack, playingTrack, isPlaying: isGlobalPlaying } = useAudio();
@@ -241,16 +330,19 @@ export default function TrackDetail() {
   const [communityRatings, setCommunityRatings] = useState<UserRating[]>([]);
   const [isFavorited, setIsFavorited] = useState(false);
   const [loadingFavorite, setLoadingFavorite] = useState(true);
+
+  // State for playlist modal
+  const [isModalOpen, setIsModalOpen] = useState(false);
   
   // Determine if the current track detail page's track is the one playing globally
   const isCurrentTrackPlaying = playingTrack?.id?.toString() === track?.id?.toString() && isGlobalPlaying;
 
   // Fetch track data
   useEffect(() => {
-    if (!id) return;
+    if (!trackId || typeof trackId !== 'string') return;
     
     const fetchTrackData = async () => {
-      // Reset states on new ID
+      // Reset states
       setLoading(true);
       setLoadingFavorite(true);
       setError(null);
@@ -260,26 +352,27 @@ export default function TrackDetail() {
       setAverageRating(0);
       setRatingCount(0);
       setCommunityRatings([]);
-      setIsFavorited(false); // Reset favorite status
+      setIsFavorited(false);
+      setIsModalOpen(false); // Close modal on new track load
 
       try {
-        // Use Promise.all to fetch in parallel
+        // Fetch in parallel
         const [trackRes, ratingsRes, commRatingsRes, userRatingRes, favoriteStatusRes] = await Promise.all([
-          fetch(`/api/tracks/${id}`), 
-          fetch(`/api/ratings/average?itemId=${id}&itemType=track`), 
-          fetch(`/api/ratings/item?itemId=${id}&itemType=track&limit=10`), 
-          session ? fetch(`/api/ratings?itemId=${id}&type=track`) : Promise.resolve(null), // Fetch user rating only if logged in
-          session ? fetch(`/api/favorites/status?trackId=${id}`) : Promise.resolve(null) // Fetch favorite status only if logged in
+          fetch(`/api/tracks/${trackId}`), 
+          fetch(`/api/ratings/average?itemId=${trackId}&itemType=track`), 
+          fetch(`/api/ratings/item?itemId=${trackId}&itemType=track&limit=10`), 
+          session ? fetch(`/api/ratings?itemId=${trackId}&type=track`) : Promise.resolve(null),
+          session ? fetch(`/api/favorites/status?trackId=${trackId}`) : Promise.resolve(null)
         ]);
 
         // Handle Track Data
         if (!trackRes.ok) {
           const errorBody = await trackRes.text();
-          console.error(`Failed API fetch for track ${id}: ${trackRes.status}`, errorBody);
+          console.error(`Failed API fetch for track ${trackId}: ${trackRes.status}`, errorBody);
+          if (trackRes.status === 404) throw new Error('Track not found.');
           throw new Error(`Failed to fetch track data: ${trackRes.statusText}`);
         }
         const trackData: Track = await trackRes.json();
-        console.log("Fetched Track Data:", trackData);
         setTrack(trackData);
 
         // Handle Average Ratings
@@ -312,9 +405,9 @@ export default function TrackDetail() {
         if (favoriteStatusRes && favoriteStatusRes.ok) {
            const favData = await favoriteStatusRes.json();
            setIsFavorited(favData.isFavorited === true);
-           console.log(`Track ${id} favorite status: ${favData.isFavorited}`);
+           console.log(`Track ${trackId} favorite status: ${favData.isFavorited}`);
         } else if (favoriteStatusRes && !favoriteStatusRes.ok) {
-            console.warn(`Failed to fetch favorite status for track ${id}: ${favoriteStatusRes.status}`);
+            console.warn(`Failed to fetch favorite status for track ${trackId}: ${favoriteStatusRes.status}`);
         }
 
       } catch (error) {
@@ -322,36 +415,20 @@ export default function TrackDetail() {
         setError(error instanceof Error ? error.message : "An unknown error occurred");
       } finally {
         setLoading(false);
-        setLoadingFavorite(false); // Mark favorite loading as done
+        setLoadingFavorite(false);
       }
     };
     
     fetchTrackData();
-  // Include session?.user?.id in dependencies to refetch favorite status if user logs in/out
-  }, [id, session?.user?.id]); 
+  }, [trackId, session?.user?.id]); 
   
-  // Removed redundant useEffect for community ratings/favorites
 
   // Submit rating and review
   const handleRatingSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-    
-    // Use the track ID from the fetched track state, not from params
-    const itemIdToSubmit = track?.id; 
-
-    if (!session) {
-      // Handle not logged in
-      console.warn("User not logged in, cannot submit rating.");
-      // Optionally redirect to login or show message
-      return;
-    }
-
-    if (!itemIdToSubmit) {
-      console.error("Cannot submit rating: Track ID is missing from state.");
-      alert("Error: Could not determine track ID.");
-      return;
-    }
-    
+    const itemIdToSubmit = track?.id;
+    if (!session) { return; }
+    if (!itemIdToSubmit) { return; }
     try {
       setIsSubmitting(true);
       console.log("Submitting rating with session:", !!session, "User ID:", session?.user?.id, "Item ID:", itemIdToSubmit);
@@ -455,14 +532,10 @@ export default function TrackDetail() {
   };
 
   const handleToggleFavorite = async () => {
-    if (!session || !track) return;
-    if (loadingFavorite) return; // Prevent double clicks
-
-    const currentIsFavorited = isFavorited; // Store current state for optimistic update
-    setLoadingFavorite(true); // Indicate loading
-    // Optimistic UI update
+    if (!session || !track || loadingFavorite) return;
+    const currentIsFavorited = isFavorited;
+    setLoadingFavorite(true);
     setIsFavorited(!currentIsFavorited); 
-
     try {
       const response = await fetch('/api/favorites', {
         method: currentIsFavorited ? 'DELETE' : 'POST',
@@ -492,29 +565,52 @@ export default function TrackDetail() {
     }
   };
 
-  if (loading) {
-    return <div className="flex justify-center items-center min-h-screen bg-gradient-to-b from-[#1f1f1f] to-[#121212] text-white">Loading...</div>;
-  }
+  // --- Add to Playlist Handlers --- 
+  const handleOpenPlaylistModal = () => {
+      if (!session) {
+          signIn('spotify'); // Prompt sign in if not logged in
+          return;
+      }
+      if (!track) return; // Should not happen if button is visible
+      setIsModalOpen(true);
+  };
 
-  if (error) {
-    return <div className="flex justify-center items-center min-h-screen bg-gradient-to-b from-[#1f1f1f] to-[#121212] text-white">Error: {error}</div>;
-  }
+  const handleAddToPlaylistSubmit = async (playlistId: string | null, newPlaylistName: string | null) => {
+     if (!track) return; // Need track ID
 
-  if (!track) {
-    return <div className="flex justify-center items-center min-h-screen bg-gradient-to-b from-[#1f1f1f] to-[#121212] text-white">Track not found.</div>;
-  }
+     console.log("Adding track:", track.id, "to", playlistId || newPlaylistName);
+     try {
+         const res = await fetch('/api/favorites/export', { // Use the same export endpoint
+             method: 'POST',
+             headers: { 'Content-Type': 'application/json' },
+             body: JSON.stringify({
+                 trackIds: [track.id], // Send only the current track's ID
+                 targetPlaylistId: playlistId,
+                 newPlaylistName: newPlaylistName,
+             })
+         });
+         const result = await res.json();
+         if (!res.ok) {
+             throw new Error(result.error || result.details?.error?.message || `Failed to export (${res.status})`);
+         }
+         toast.success(result.message || 'Track added successfully!');
+         setIsModalOpen(false); 
+         // No need to clear selection state here
+     } catch (err) {
+          console.error("Export API error:", err);
+          toast.error(`Failed to add track: ${err instanceof Error ? err.message : 'Unknown error'}`);
+          throw err; // Re-throw for modal error handling
+     }
+  };
 
-  const imageUrl = track.album?.images?.[0]?.url || '/placeholder-album.png';
+  // Loading and Error states handled inside return
+  const imageUrl = track?.album?.images?.[0]?.url || '/placeholder-album.png';
 
   return (
     <div className="bg-gradient-to-b from-[#1f1f1f] to-[#121212] min-h-screen text-white">
       <Navbar />
       <main className="pt-20 pb-20 px-4 md:px-8 max-w-6xl mx-auto">
-        <AnimatePresence>
-          {showSuccess && <SuccessToast message={successMessage} />}
-        </AnimatePresence>
-        
-        {/* Back Button */}
+        {/* Back Button */} 
         <button 
           onClick={() => router.back()} 
           className="mb-6 inline-flex items-center gap-2 text-sm text-neutral-400 hover:text-white transition"
@@ -523,277 +619,321 @@ export default function TrackDetail() {
           Back
         </button>
 
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-8 md:gap-12">
-          {/* Left Column: Image, Basic Info, Actions */}
-          <div className="md:col-span-1">
-             {/* --- Image with Play/Favorite Buttons Overlay --- */}
-            <div className="relative group aspect-square mb-6 shadow-xl">
-              <img
-                src={imageUrl}
-                alt={track.name || 'Track artwork'}
-                className="w-full h-full object-cover rounded-lg"
-                onError={(e) => { e.currentTarget.src = '/placeholder-album.png'; }}
-              />
-              {/* Overlay container for buttons */} 
-              {/* Make overlay always present but transparent by default, fades in on hover */} 
-              <div className="absolute inset-0 flex items-center justify-center bg-black bg-opacity-0 group-hover:bg-opacity-70 transition-opacity duration-300 rounded-lg">
-                {/* Favorite Button (top-right) - Always visible within container, styled on hover */}
-                <div className="absolute top-3 right-3 z-10">
-                   {/* Loader remains the same */}
-                   {loadingFavorite ? (
-                     <div className="w-10 h-10 flex items-center justify-center p-2 rounded-full bg-black/50 backdrop-blur-sm">
-                       <div className="animate-spin rounded-full h-5 w-5 border-t-2 border-b-2 border-neutral-400"></div>
-                     </div>
-                   ) : session ? (
-                     // Actual Button - visible, style changes on hover
-                     <motion.button
-                       whileTap={{ scale: 0.9 }}
-                       onClick={handleToggleFavorite}
-                       // Base visibility, backdrop for contrast, hover styles change background/text
-                       className={`p-2 rounded-full transition-all duration-200 backdrop-blur-sm bg-black/40 ${ 
-                         isFavorited ? 'text-red-500 hover:bg-red-900/50' : 'text-neutral-300 hover:text-white hover:bg-black/60'
-                       }`}
-                       aria-label={isFavorited ? 'Remove from favorites' : 'Add to favorites'}
-                     >
-                       {isFavorited ? (
-                         <HeartIconSolid className="w-6 h-6" />
+        {/* Main Content Area */} 
+        {loading ? (
+            <TrackPageSkeleton />
+        ) : error ? (
+            <ErrorDisplay message={error} />
+        ) : !track ? (
+            <ErrorDisplay message={"Track not found."} />
+        ) : (
+          // Actual Track Content
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-8 md:gap-12">
+            {/* Left Column: Image, Basic Info, Actions */}
+            <div className="md:col-span-1">
+              {/* --- Image with Play/Favorite/Add Buttons Overlay --- */}
+              <div className="relative group aspect-square mb-6 shadow-xl">
+                {/* Use Next Image */} 
+                <Image
+                  src={imageUrl}
+                  alt={track.name || 'Track artwork'}
+                  fill // Use fill for aspect ratio container
+                  sizes="(max-width: 768px) 100vw, (max-width: 1024px) 33vw, 400px" // Example sizes
+                  priority
+                  unoptimized // Spotify images are already optimized
+                  className="object-cover rounded-lg"
+                  onError={(e) => { (e.target as HTMLImageElement).src = '/placeholder-album.png'; }}
+                />
+                {/* Overlay for buttons */}
+                <div className="absolute inset-0 flex items-center justify-center bg-black bg-opacity-0 group-hover:bg-opacity-70 transition-opacity duration-300 rounded-lg">
+                  {/* Top Right Buttons (Favorite & Add) */} 
+                  <div className="absolute top-3 right-3 z-10 flex flex-col gap-2">
+                    {/* Favorite Button */} 
+                    <div>
+                      {loadingFavorite ? (
+                        <div className="w-10 h-10 flex items-center justify-center p-2 rounded-full bg-black/50 backdrop-blur-sm">
+                          <div className="animate-spin rounded-full h-5 w-5 border-t-2 border-b-2 border-neutral-400"></div>
+                        </div>
+                      ) : session ? (
+                        <motion.button
+                          whileTap={{ scale: 0.9 }}
+                          onClick={handleToggleFavorite}
+                          className={`p-2 rounded-full transition-all duration-200 backdrop-blur-sm bg-black/40 ${ 
+                            isFavorited ? 'text-red-500 hover:bg-red-900/50' : 'text-neutral-300 hover:text-white hover:bg-black/60'
+                          }`}
+                          aria-label={isFavorited ? 'Remove from favorites' : 'Add to favorites'}
+                          title={isFavorited ? 'Remove from favorites' : 'Add to favorites'}
+                        >
+                          {isFavorited ? <HeartIconSolid className="w-6 h-6" /> : <HeartIconOutline className="w-6 h-6" />}
+                        </motion.button>
+                      ) : (
+                        <button
+                          onClick={() => signIn('spotify')}
+                          className="p-2 rounded-full transition-colors text-neutral-400 bg-black/40 hover:text-white hover:bg-black/60 backdrop-blur-sm"
+                          aria-label="Sign in to favorite"
+                          title="Sign in to favorite"
+                        >
+                          <HeartIconOutline className="w-6 h-6" />
+                        </button>
+                      )}
+                    </div>
+                    {/* Add to Playlist Button */} 
+                    <div>
+                       {session ? (
+                          <motion.button
+                            whileTap={{ scale: 0.9 }}
+                            onClick={handleOpenPlaylistModal}
+                            className="p-2 rounded-full transition-all duration-200 backdrop-blur-sm bg-black/40 text-neutral-300 hover:text-white hover:bg-black/60"
+                            aria-label="Add to playlist"
+                            title="Add to playlist"
+                          >
+                            <PlusIcon className="w-6 h-6" />
+                          </motion.button>
                        ) : (
-                         <HeartIconOutline className="w-6 h-6" />
+                          <button
+                            onClick={() => signIn('spotify')}
+                            className="p-2 rounded-full transition-colors text-neutral-400 bg-black/40 hover:text-white hover:bg-black/60 backdrop-blur-sm"
+                            aria-label="Sign in to add to playlist"
+                            title="Sign in to add to playlist"
+                          >
+                            <PlusIcon className="w-6 h-6" />
+                          </button>
                        )}
-                     </motion.button>
-                   ) : (
-                     // Sign In Prompt - visible
-                     <button
-                       onClick={() => signIn('spotify')}
-                       className="p-2 rounded-full transition-colors text-neutral-400 bg-black/40 hover:text-white hover:bg-black/60 backdrop-blur-sm"
-                       aria-label="Sign in to favorite"
-                       title="Sign in to favorite"
-                     >
-                        <HeartIconOutline className="w-6 h-6" />
-                     </button>
-                   )}
-                </div> 
+                    </div>
+                  </div> 
 
-                {/* Play Button (centered) - Logic remains the same, visibility tied to group hover */} 
-                {track.preview_url && (
-                  <button
-                    onClick={handlePlayToggle}
-                    className="focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-[#121212] focus:ring-[#1DB954] rounded-full relative z-0" // Play button below favorite
-                    aria-label={isCurrentTrackPlaying ? "Pause preview" : "Play preview"}
-                  >
-                    <AnimatePresence initial={false} mode="wait">
-                      <motion.div
-                        key={isCurrentTrackPlaying ? 'pause' : 'play'}
-                        initial={{ opacity: 0, scale: 0.5 }}
-                        animate={{ opacity: 1, scale: 1 }}
-                        exit={{ opacity: 0, scale: 0.5 }}
-                        transition={{ duration: 0.2 }}
-                        className="text-white bg-[#1DB954] rounded-full p-3 shadow-lg opacity-0 group-hover:opacity-100 transition-opacity duration-300 transform group-hover:scale-110"
-                      >
-                        {isCurrentTrackPlaying ? (
-                          <PauseIcon className="w-8 h-8 md:w-10 md:h-10" />
-                        ) : (
-                          <PlayIcon className="w-8 h-8 md:w-10 md:h-10" />
-                        )}
-                      </motion.div>
-                    </AnimatePresence>
-                  </button>
+                  {/* Play Button (Centered) */} 
+                  {track.preview_url && (
+                    <button
+                      onClick={handlePlayToggle}
+                      className="focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-[#121212] focus:ring-[#1DB954] rounded-full relative z-0"
+                      aria-label={isCurrentTrackPlaying ? "Pause preview" : "Play preview"}
+                    >
+                      <AnimatePresence initial={false} mode="wait">
+                        <motion.div
+                          key={isCurrentTrackPlaying ? 'pause' : 'play'}
+                          initial={{ opacity: 0, scale: 0.5 }}
+                          animate={{ opacity: 1, scale: 1 }}
+                          exit={{ opacity: 0, scale: 0.5 }}
+                          transition={{ duration: 0.2 }}
+                          className="text-white bg-[#1DB954] rounded-full p-3 shadow-lg opacity-0 group-hover:opacity-100 transition-opacity duration-300 transform group-hover:scale-110"
+                        >
+                          {isCurrentTrackPlaying ? (
+                            <PauseIcon className="w-8 h-8 md:w-10 md:h-10" />
+                          ) : (
+                            <PlayIcon className="w-8 h-8 md:w-10 md:h-10" />
+                          )}
+                        </motion.div>
+                      </AnimatePresence>
+                    </button>
+                  )}
+                </div> 
+              </div>
+              {/* --- End Image --- */} 
+              
+              {/* --- Track Info --- */} 
+              <h1 className="text-3xl font-bold mb-2 break-words">{track.name}</h1>
+              <div className="text-lg text-neutral-400 mb-4">
+                 {track.artists?.map((artist, index) => (
+                   <span key={artist.id}>
+                     <Link href={`/artist/${artist.id}`} className="hover:underline">
+                       {artist.name}
+                     </Link>
+                     {index < track.artists!.length - 1 ? ', ' : ''}
+                   </span>
+                 ))}
+               </div>
+               <div className="text-sm text-neutral-500">
+                  <span>Album: </span> 
+                  <Link href={`/album/${track.album?.id}`} className="hover:underline">
+                    {track.album?.name}
+                  </Link> 
+                  <span> • {track.album?.release_date?.substring(0, 4)}</span>
+                </div>
+                <div className="text-sm text-neutral-400 mb-4">
+                  Duration: {formatDuration(track.duration_ms)}
+                </div>
+
+                {/* --- Listen on Spotify Button --- */} 
+                {track.external_urls?.spotify && (
+                   <a
+                      href={track.external_urls.spotify}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="w-full bg-[#1DB954] text-black font-bold py-2.5 px-4 rounded-full hover:bg-[#1ED760] transition flex items-center justify-center gap-2 text-sm shadow-md mb-6"
+                   >
+                      <svg className="w-5 h-5" viewBox="0 0 24 24" fill="currentColor">
+                        <path d="M12 0C5.4 0 0 5.4 0 12s5.4 12 12 12 12-5.4 12-12S18.66 0 12 0zm5.521 17.34c-.24.359-.66.48-1.021.24-2.82-1.74-6.36-2.101-10.561-1.141-.418.122-.779-.179-.899-.539-.12-.421.18-.78.54-.9 4.56-1.021 8.52-.6 11.64 1.32.42.18.479.659.301 1.02zm1.44-3.3c-.301.42-.841.6-1.262.3-3.239-1.98-8.159-2.58-11.939-1.38-.479.12-1.02-.12-1.14-.6-.12-.48.12-1.021.6-1.141C9.6 9.9 15 10.561 18.72 12.84c.361.181.54.78.241 1.2zm.12-3.36C15.24 8.4 8.82 8.16 5.16 9.301c-.6.179-1.2-.181-1.38-.721-.18-.601.18-1.2.72-1.381 4.26-1.26 11.28-1.02 15.721 1.621.539.3.719 1.02.419 1.56-.299.421-1.02.599-1.559.3z"/>
+                      </svg>
+                      Listen on Spotify
+                   </a>
                 )}
               </div> 
-            </div>
-            {/* --- End Image --- */}
-            
-            <h1 className="text-3xl font-bold mb-2">{track.name}</h1>
-            <div className="text-lg text-neutral-400 mb-4">
-              {track.artists?.map((artist, index) => (
-                <span key={artist.id}>
-                  <Link href={`/artist/${artist.id}`} className="hover:underline">
-                    {artist.name}
-                  </Link>
-                  {index < track.artists!.length - 1 ? ', ' : ''}
-                </span>
-              ))}
-            </div>
-            <div className="text-sm text-neutral-500">
-              <span>Album: </span> 
-              <Link href={`/album/${track.album?.id}`} className="hover:underline">
-                {track.album?.name}
-              </Link> 
-              <span> • {track.album?.release_date?.substring(0, 4)}</span>
-            </div>
-            <div className="text-sm text-neutral-400 mb-4">
-              Duration: {formatDuration(track.duration_ms)}
-            </div>
+              {/* End Left Column */} 
 
-            {/* --- Listen on Spotify Button --- */} 
-            {track.external_urls?.spotify && (
-               <a
-                  href={track.external_urls.spotify}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="w-full bg-[#1DB954] text-black font-bold py-2.5 px-4 rounded-full hover:bg-[#1ED760] transition flex items-center justify-center gap-2 text-sm shadow-md mb-6"
-               >
-                  <svg className="w-5 h-5" viewBox="0 0 24 24" fill="currentColor">
-                    <path d="M12 0C5.4 0 0 5.4 0 12s5.4 12 12 12 12-5.4 12-12S18.66 0 12 0zm5.521 17.34c-.24.359-.66.48-1.021.24-2.82-1.74-6.36-2.101-10.561-1.141-.418.122-.779-.179-.899-.539-.12-.421.18-.78.54-.9 4.56-1.021 8.52-.6 11.64 1.32.42.18.479.659.301 1.02zm1.44-3.3c-.301.42-.841.6-1.262.3-3.239-1.98-8.159-2.58-11.939-1.38-.479.12-1.02-.12-1.14-.6-.12-.48.12-1.021.6-1.141C9.6 9.9 15 10.561 18.72 12.84c.361.181.54.78.241 1.2zm.12-3.36C15.24 8.4 8.82 8.16 5.16 9.301c-.6.179-1.2-.181-1.38-.721-.18-.601.18-1.2.72-1.381 4.26-1.26 11.28-1.02 15.721 1.621.539.3.719 1.02.419 1.56-.299.421-1.02.599-1.559.3z"/>
-                  </svg>
-                  Listen on Spotify
-               </a>
-            )}
-          </div> 
-          {/* End Left Column */} 
+              {/* Right Column: Rating, Review, Community */} 
+              <div className="md:col-span-2">
+                 {/* Community Ratings Section */}
+                 <motion.div
+                   initial={{ opacity: 0, y: 20 }}
+                   animate={{ opacity: 1, y: 0 }}
+                   transition={{ duration: 0.5, delay: 0.7 }}
+                   className="mb-12"
+                 >
+                   <div className="flex items-center justify-between mb-6">
+                     <h2 className="text-2xl font-bold text-white">Community Ratings & Reviews</h2>
+                     {session && (
+                       <button
+                         onClick={() => {
+                           const element = document.getElementById('user-rating-section');
+                           if (element) {
+                             element.scrollIntoView({ behavior: 'smooth' });
+                           }
+                         }}
+                         className="bg-[#1DB954]/20 text-[#1DB954] px-4 py-2 rounded-full text-sm hover:bg-[#1DB954]/30 transition-colors"
+                       >
+                         Add Your Rating
+                       </button>
+                     )}
+                   </div>
+                   
+                   {communityRatings.length > 0 ? (
+                     <div className="space-y-4">
+                       {communityRatings.map((rating) => (
+                         <UserRatingItem key={rating.id} rating={rating} />
+                       ))}
+                     </div>
+                   ) : (
+                     <div className="bg-[#181818] rounded-lg p-8 text-center shadow-md">
+                       <p className="text-gray-400 mb-4">No ratings yet. Be the first to rate this track!</p>
+                       {!session && (
+                         <Link 
+                           href="/login"
+                           className="bg-[#1DB954] text-black font-bold py-2 px-6 rounded-full inline-block hover:scale-105 transition-transform"
+                         >
+                           Sign In to Rate
+                         </Link>
+                       )}
+                     </div>
+                   )}
+                 </motion.div>
 
-          {/* Right Column: Rating, Review, Community */} 
-          <div className="md:col-span-2">
-            {/* Community Ratings Section */}
-            <motion.div
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.5, delay: 0.7 }}
-              className="mb-12"
-            >
-              <div className="flex items-center justify-between mb-6">
-                <h2 className="text-2xl font-bold text-white">Community Ratings & Reviews</h2>
-                {session && (
-                  <button
-                    onClick={() => {
-                      const element = document.getElementById('user-rating-section');
-                      if (element) {
-                        element.scrollIntoView({ behavior: 'smooth' });
-                      }
-                    }}
-                    className="bg-[#1DB954]/20 text-[#1DB954] px-4 py-2 rounded-full text-sm hover:bg-[#1DB954]/30 transition-colors"
-                  >
-                    Add Your Rating
-                  </button>
-                )}
-              </div>
-              
-              {communityRatings.length > 0 ? (
-                <div className="space-y-4">
-                  {communityRatings.map((rating) => (
-                    <UserRatingItem key={rating.id} rating={rating} />
-                  ))}
-                </div>
-              ) : (
-                <div className="bg-[#181818] rounded-lg p-8 text-center shadow-md">
-                  <p className="text-gray-400 mb-4">No ratings yet. Be the first to rate this track!</p>
-                  {!session && (
-                    <Link 
-                      href="/login"
-                      className="bg-[#1DB954] text-black font-bold py-2 px-6 rounded-full inline-block hover:scale-105 transition-transform"
-                    >
-                      Sign In to Rate
-                    </Link>
-                  )}
-                </div>
-              )}
-            </motion.div>
-
-            {/* Your Rating Section */}
-            <motion.div 
-              id="user-rating-section"
-              className="bg-[#181818] p-6 rounded-lg shadow-xl mb-8"
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.5, delay: 0.5 }}
-            >
-              <h3 className="text-xl font-bold mb-4 text-white">Your Rating & Review</h3>
-              
-              {!session ? (
-                <div className="text-center py-4">
-                  <p className="text-gray-400 mb-4">Sign in to rate and review this track</p>
-                  <Link 
-                    href="/login"
-                    className="bg-[#1DB954] text-black font-bold py-2 px-6 rounded-full inline-block hover:bg-opacity-90 transition-colors"
-                  >
-                    Sign In
-                  </Link>
-                </div>
-              ) : (
-                <form onSubmit={handleRatingSubmit}>
-                  <div className="mb-6">
-                    <label className="block text-sm font-medium mb-2 text-white">Your Rating</label>
-                    <StarRating 
-                      rating={userRating} 
-                      onChange={setUserRating} 
-                      size="lg"
-                    />
-                  </div>
-                  
-                  <div className="mb-6">
-                    <label htmlFor="review" className="block text-sm font-medium mb-2 text-white">Your Review (Optional)</label>
-                    <textarea
-                      id="review"
-                      rows={4}
-                      className="w-full bg-[#282828] text-white rounded-md px-4 py-3 focus:outline-none focus:ring-2 focus:ring-[#1DB954]"
-                      placeholder="Share your thoughts about this track..."
-                      value={userReview}
-                      onChange={(e) => setUserReview(e.target.value)}
-                    />
-                  </div>
-                  
-                  <div className="flex items-center justify-between">
-                    <button
-                      type="submit"
-                      disabled={isSubmitting || userRating === 0}
-                      className={`bg-[#1DB954] text-black font-bold py-3 px-8 rounded-full ${isSubmitting || userRating === 0 ? 'opacity-70 cursor-not-allowed' : 'hover:bg-opacity-90 transition-colors'}`}
-                    >
-                      {isSubmitting ? 'Saving...' : userRating ? 'Update Rating' : 'Save Rating'}
-                    </button>
-                    
-                    {userRating > 0 && (
-                      <p className="text-sm text-gray-400">
-                        {new Date().toLocaleDateString()} • {session?.user?.name}
-                      </p>
-                    )}
-                  </div>
-                  
-                  {/* Success message */}
-                  <AnimatePresence>
-                    {showSuccess && (
-                      <motion.div 
-                        initial={{ opacity: 0, y: 10 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        exit={{ opacity: 0 }}
-                        className="mt-4 bg-[#1DB954]/20 text-[#1DB954] p-2 rounded-md text-center"
-                      >
-                        {successMessage}
-                      </motion.div>
-                    )}
-                  </AnimatePresence>
-                </form>
-              )}
-            </motion.div>
-            
-            {/* Album Link */}
-            {track.album && (
-              <motion.div 
-                className="bg-[#181818] p-4 rounded-lg shadow-md"
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.5, delay: 0.6 }}
-              >
-                <Link 
-                  href={`/album/${track.album?.id ?? ''}`}
-                  className="inline-flex items-center hover:bg-[#282828] transition-colors p-4 rounded-lg w-full"
-                >
-                  <div className="w-16 h-16 mr-4 shrink-0">
-                    <img 
-                      src={track.album?.images?.[0]?.url || '/placeholder.png'} 
-                      alt={track.album?.name || ''}
-                      className="w-full h-full object-cover rounded"
-                    />
-                  </div>
-                  <div>
-                    <p className="text-sm text-gray-400">See full album</p>
-                    <p className="font-bold text-white">{track.album?.name}</p>
-                  </div>
-                </Link>
-              </motion.div>
-            )}
-          </div>
-        </div>
+                 {/* Your Rating Section */}
+                 <motion.div 
+                   id="user-rating-section"
+                   className="bg-[#181818] p-6 rounded-lg shadow-xl mb-8"
+                   initial={{ opacity: 0, y: 20 }}
+                   animate={{ opacity: 1, y: 0 }}
+                   transition={{ duration: 0.5, delay: 0.5 }}
+                 >
+                   <h3 className="text-xl font-bold mb-4 text-white">Your Rating & Review</h3>
+                   
+                   {!session ? (
+                     <div className="text-center py-4">
+                       <p className="text-gray-400 mb-4">Sign in to rate and review this track</p>
+                       <Link 
+                         href="/login"
+                         className="bg-[#1DB954] text-black font-bold py-2 px-6 rounded-full inline-block hover:bg-opacity-90 transition-colors"
+                       >
+                         Sign In
+                       </Link>
+                     </div>
+                   ) : (
+                     <form onSubmit={handleRatingSubmit}>
+                       <div className="mb-6">
+                         <label className="block text-sm font-medium mb-2 text-white">Your Rating</label>
+                         <StarRating 
+                           rating={userRating} 
+                           onChange={setUserRating} 
+                           size="lg"
+                         />
+                       </div>
+                       
+                       <div className="mb-6">
+                         <label htmlFor="review" className="block text-sm font-medium mb-2 text-white">Your Review (Optional)</label>
+                         <textarea
+                           id="review"
+                           rows={4}
+                           className="w-full bg-[#282828] text-white rounded-md px-4 py-3 focus:outline-none focus:ring-2 focus:ring-[#1DB954]"
+                           placeholder="Share your thoughts about this track..."
+                           value={userReview}
+                           onChange={(e) => setUserReview(e.target.value)}
+                         />
+                       </div>
+                       
+                       <div className="flex items-center justify-between">
+                         <button
+                           type="submit"
+                           disabled={isSubmitting || userRating === 0}
+                           className={`bg-[#1DB954] text-black font-bold py-3 px-8 rounded-full ${isSubmitting || userRating === 0 ? 'opacity-70 cursor-not-allowed' : 'hover:bg-opacity-90 transition-colors'}`}
+                         >
+                           {isSubmitting ? 'Saving...' : userRating ? 'Update Rating' : 'Save Rating'}
+                         </button>
+                         
+                         {userRating > 0 && (
+                           <p className="text-sm text-gray-400">
+                             {new Date().toLocaleDateString()} • {session?.user?.name}
+                           </p>
+                         )}
+                       </div>
+                       
+                       {/* Success message */}
+                       <AnimatePresence>
+                         {showSuccess && (
+                           <motion.div 
+                             initial={{ opacity: 0, y: 10 }}
+                             animate={{ opacity: 1, y: 0 }}
+                             exit={{ opacity: 0 }}
+                             className="mt-4 bg-[#1DB954]/20 text-[#1DB954] p-2 rounded-md text-center"
+                           >
+                             {successMessage}
+                           </motion.div>
+                         )}
+                       </AnimatePresence>
+                     </form>
+                   )}
+                 </motion.div>
+                 
+                 {/* Album Link */}
+                 {track.album && (
+                   <motion.div 
+                     className="bg-[#181818] p-4 rounded-lg shadow-md"
+                     initial={{ opacity: 0, y: 20 }}
+                     animate={{ opacity: 1, y: 0 }}
+                     transition={{ duration: 0.5, delay: 0.6 }}
+                   >
+                     <Link 
+                       href={`/album/${track.album?.id ?? ''}`}
+                       className="inline-flex items-center hover:bg-[#282828] transition-colors p-4 rounded-lg w-full"
+                     >
+                       <div className="w-16 h-16 mr-4 shrink-0">
+                         <img 
+                           src={track.album?.images?.[0]?.url || '/placeholder.png'} 
+                           alt={track.album?.name || ''}
+                           className="w-full h-full object-cover rounded"
+                         />
+                       </div>
+                       <div>
+                         <p className="text-sm text-gray-400">See full album</p>
+                         <p className="font-bold text-white">{track.album?.name}</p>
+                       </div>
+                     </Link>
+                   </motion.div>
+                 )}
+               </div>
+             </div>
+          )}
       </main>
+
+       {/* --- Render the Modal --- */} 
+        <AddToPlaylistModal
+            isOpen={isModalOpen}
+            onClose={() => setIsModalOpen(false)}
+            onAddToPlaylist={handleAddToPlaylistSubmit} 
+            itemCount={track ? 1 : 0} // Only ever adding 1 track
+            itemNoun="track"
+        />
+
     </div>
   );
 } 

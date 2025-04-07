@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
-import { getStapleMoodTracks } from '@/lib/supabase';
+import { getTopStapleTracksPerMood } from '@/lib/supabase';
 import { getUserId } from '@/lib/session';
 import { checkDbConnection, checkTableExists } from '@/lib/db-status';
 
@@ -25,7 +25,7 @@ function createApiResponse(success: boolean, data: any = null, message: string =
 
 /**
  * GET handler for /api/moods/staple-tracks
- * Returns all tracks associated with staple moods
+ * Returns the TOP 2 tracks associated with each staple mood
  */
 export async function GET(request: Request) {
   console.log(`GET /api/moods/staple-tracks - Request URL: ${request.url}`);
@@ -51,75 +51,41 @@ export async function GET(request: Request) {
       // In development, provide test data instead of authorization error
       if (process.env.NODE_ENV === 'development') {
         console.log('Development mode: returning mock staple tracks');
-        return createApiResponse(true, getMockStapleMoodTracks());
+        // Consider updating the mock function if needed, or removing it later
+        // return createApiResponse(true, getMockStapleMoodTracks()); 
+        // For now, let's try the actual call even in dev if no session
+        // return createApiResponse(false, null, 'Unauthorized');
+      } else {
+        return createApiResponse(false, null, 'Unauthorized');
       }
-      return createApiResponse(false, null, 'Unauthorized');
+      // Allow dev without session to proceed to actual function call below
+      // If this causes issues, uncomment the return statements above.
+      console.warn('Proceeding without session in development mode.');
     }
     
-    // Get staple mood tracks - no need for user ID in this case
-    const stapleTracks = await getStapleMoodTracks();
-    console.log(`Retrieved ${stapleTracks.length} staple mood tracks`);
+    // Call the NEW function to get top tracks
+    const topStapleTracks = await getTopStapleTracksPerMood();
+    console.log(`Retrieved ${topStapleTracks.length} top staple mood tracks via RPC`);
     
-    return createApiResponse(true, stapleTracks);
+    return createApiResponse(true, topStapleTracks);
   } catch (error) {
-    console.error('Error fetching staple mood tracks:', error);
+    console.error('Error fetching top staple mood tracks:', error);
     // In development, provide test data on error
     if (process.env.NODE_ENV === 'development') {
-      console.log('Development mode: returning mock staple tracks after error');
-      return createApiResponse(true, getMockStapleMoodTracks());
+      console.log('Development mode: returning empty array after error fetching top tracks');
+      // Return empty array instead of mock data on error
+      return createApiResponse(true, [], 'Error in development, returning empty array');
     }
     return createApiResponse(false, null, 
-      `Error fetching staple mood tracks: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      `Error fetching top staple mood tracks: ${error instanceof Error ? error.message : 'Unknown error'}`);
   }
 }
 
 /**
  * Generate mock staple mood tracks for testing when database doesn't have any
+ * NOTE: This mock data may no longer be suitable if the structure changed.
  */
-function getMockStapleMoodTracks() {
-  return [
-    {
-      id: 'mock-happy-track-1',
-      staple_mood_id: 'mock-happy',
-      mood_name: 'Happy',
-      track_id: '4iV5W9uYEdYUVa79Axb7Rh',
-      track_name: 'Starboy',
-      artist_name: 'The Weeknd',
-      track_image: 'https://i.scdn.co/image/ab67616d0000b2738399047ff71200928f5b4be2',
-      added_at: new Date().toISOString()
-    },
-    {
-      id: 'mock-happy-track-2',
-      staple_mood_id: 'mock-happy',
-      mood_name: 'Happy',
-      track_id: '0VjIjW4GlUZAMYd2vXMi3b',
-      track_name: 'Blinding Lights',
-      artist_name: 'The Weeknd',
-      track_image: 'https://i.scdn.co/image/ab67616d0000b2738863bc11d2aa12b54f5aeb36',
-      added_at: new Date().toISOString()
-    },
-    {
-      id: 'mock-relaxed-track-1',
-      staple_mood_id: 'mock-relaxed',
-      mood_name: 'Relaxed',
-      track_id: '6DCZcSspjsKoFjzjrWoCdn',
-      track_name: 'God\'s Plan',
-      artist_name: 'Drake',
-      track_image: 'https://i.scdn.co/image/ab67616d0000b273731731446f99d23a3535bd3f',
-      added_at: new Date().toISOString()
-    },
-    {
-      id: 'mock-focus-track-1',
-      staple_mood_id: 'mock-focus',
-      mood_name: 'Focus',
-      track_id: '3n3Ppam7vgaVa1iaRUc9Lp',
-      track_name: 'Party Monster',
-      artist_name: 'The Weeknd',
-      track_image: 'https://i.scdn.co/image/ab67616d0000b273e52a59eb13be11ca6f8aca66',
-      added_at: new Date().toISOString()
-    }
-  ];
-}
+// function getMockStapleMoodTracks() { ... } // Keep or remove as needed
 
 // Handle OPTIONS requests for CORS
 export async function OPTIONS() {
