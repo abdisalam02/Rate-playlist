@@ -358,8 +358,13 @@ export default function StapleMoodDetailPage() {
   }, [decodedMoodName]);
   
   const handleAddTrack = () => {
-    if (session) router.push('/moods/manage');
-    else router.push('/login?callbackUrl=/moods/manage');
+    const targetUrl = '/profile?tab=moods'; // Target profile page with moods tab
+    if (session) {
+      router.push(targetUrl);
+    } else {
+      // Redirect to login, then back to profile moods tab
+      router.push(`/login?callbackUrl=${encodeURIComponent(targetUrl)}`); 
+    }
   };
   
   const getBackgroundClass = () => {

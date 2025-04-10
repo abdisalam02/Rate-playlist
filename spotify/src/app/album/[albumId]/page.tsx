@@ -109,6 +109,38 @@ const StarRating: React.FC<StarRatingProps> = ({ rating, onChange, readonly = fa
   );
 };
 
+// --- ADD Type Definitions ---
+interface AlbumArtist {
+  name: string;
+  // Add other artist fields if needed (e.g., id)
+}
+
+interface AlbumImage {
+  url: string;
+  height?: number;
+  width?: number;
+}
+
+interface AlbumTrack {
+  id: string;
+  name: string;
+  track_number: number;
+  duration_ms: number;
+  // Add other track fields if needed (e.g., artists, preview_url)
+}
+
+interface Album {
+  id: string;
+  name: string;
+  images?: AlbumImage[];
+  artists?: AlbumArtist[];
+  release_date?: string;
+  total_tracks?: number;
+  external_urls?: { spotify?: string };
+  tracks?: { items: AlbumTrack[] };
+}
+// --- END Type Definitions ---
+
 // New User Rating Display component for community reviews
 interface UserRating {
   id: string;
@@ -168,13 +200,17 @@ function UserRatingItem({ rating }: UserRatingItemProps) {
 }
 
 export default function AlbumDetail() {
-  const { id } = useParams();
+  // --- DEBUG: Log hook results ---
+  const params = useParams();
   const router = useRouter();
   const { data: session, status } = useSession();
+  const albumId = params?.albumId as string | undefined;
+  console.log("[AlbumDetail Debug] Initial Hook Values:", { params, routerExists: !!router, sessionStatus: status, id: albumId });
+  // --- END DEBUG ---
   
-  // State for album data
-  const [album, setAlbum] = useState(null);
-  const [tracks, setTracks] = useState([]);
+  // State for album data - ADD TYPES
+  const [album, setAlbum] = useState<Album | null>(null); // Use Album type
+  const [tracks, setTracks] = useState<AlbumTrack[]>([]); // Use AlbumTrack[] type
   const [userRating, setUserRating] = useState(0);
   const [averageRating, setAverageRating] = useState(0);
   const [ratingCount, setRatingCount] = useState(0);
@@ -182,127 +218,115 @@ export default function AlbumDetail() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isFavorite, setIsFavorite] = useState(false);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
-  const [communityRatings, setCommunityRatings] = useState([]);
+  const [error, setError] = useState<string | null>(null); // Type error state
+  const [communityRatings, setCommunityRatings] = useState<UserRating[]>([]); // Use UserRating[] type
   const [showSuccess, setShowSuccess] = useState(false);
   const [successMessage, setSuccessMessage] = useState('');
   
   // Fetch album data
   useEffect(() => {
-    if (!id) return;
+    // --- DEBUG: Log useEffect entry and id value ---
+    console.log(`[AlbumDetail Debug] useEffect triggered. ID: ${albumId}, Status: ${status}`);
+    // --- END DEBUG ---
+
+    if (!albumId) {
+        console.log("[AlbumDetail Debug] useEffect returning early: No ID found.");
+        setLoading(false); // Ensure loading stops if no ID
+        setError("Album ID not found in URL.");
+        return;
+    }
     
     const fetchAlbumData = async () => {
+        // --- DEBUG: Log fetchAlbumData start ---
+        console.log(`[AlbumDetail Debug] fetchAlbumData called for ID: ${albumId}`);
+        // --- END DEBUG ---
       try {
         setLoading(true);
-        
-        // Fetch album details - ensure we're using the existing API endpoint
-        const response = await fetch(`/api/albums/${id}`, {
-          credentials: 'include',
-          cache: 'no-store',
-          headers: {
-            'Cache-Control': 'no-cache'
-          }
-        });
-        
-        if (!response.ok && response.status !== 401) {
-          throw new Error('Failed to fetch album data');
+        console.log("[useEffect Debug] Inside try block, before Promise.all");
+
+        // Fetch in parallel
+        const [albumRes, ratingsAvgRes, commRatingsRes, userRatingRes, favoriteStatusRes] = await Promise.all([
+          fetch(`/api/albums/${albumId}`),
+          fetch(`/api/ratings/average?itemId=${albumId}&itemType=album`),
+          fetch(`/api/ratings/item?itemId=${albumId}&itemType=album&limit=10`),
+          session ? fetch(`/api/ratings?itemId=${albumId}&type=album`) : Promise.resolve(null),
+          session ? fetch(`/api/check-favorite?itemId=${albumId}&itemType=album`) : Promise.resolve(null)
+        ]);
+
+        console.log("[useEffect Debug] Promise.all finished. Processing responses...");
+
+        // --- FIX: Process each response individually --- 
+
+        // 1. Handle Album Data
+        if (!albumRes.ok) {
+          const errorBody = await albumRes.text();
+          console.error(`Failed API fetch for album ${albumId}: ${albumRes.status}`, errorBody);
+          if (albumRes.status === 404) throw new Error('Album not found.');
+          throw new Error(`Failed to fetch album data: ${albumRes.statusText}`);
         }
-        
-        const albumData = await response.json();
-        setAlbum(albumData);
+        const albumData = await albumRes.json();
+        setAlbum(albumData as Album); 
         setTracks(albumData.tracks?.items || []);
-        
-        // If user is logged in, get their rating
-        if (session?.accessToken) {
-          try {
-            const ratingResponse = await fetch(`/api/ratings?itemId=${id}&type=album`, {
-              credentials: 'include',
-              cache: 'no-store',
-              headers: {
-                'Cache-Control': 'no-cache'
-              }
-            });
-            
-            if (ratingResponse.ok) {
-              const userRatingData = await ratingResponse.json();
-              if (userRatingData) {
-                // Convert from API scale (0-5) to UI scale (0-10)
-                setUserRating(userRatingData.rating ? userRatingData.rating * 2 : 0);
-                setUserReview(userRatingData.review || '');
-              }
-            } else {
-              console.log('Failed to fetch user rating:', await ratingResponse.text());
-            }
-            
-            // Check if album is in favorites
-            const favResponse = await fetch(`/api/check-favorite?itemId=${id}&itemType=album`, {
-              credentials: 'include',
-              cache: 'no-store',
-              headers: {
-                'Cache-Control': 'no-cache'
-              }
-            });
-            
-            if (favResponse.ok) {
-              const favData = await favResponse.json();
-              setIsFavorite(favData.isFavorite);
-            } else {
-              console.log('Failed to check favorite status:', await favResponse.text());
-            }
-          } catch (err) {
-            console.error("Error fetching user data:", err);
-          }
+        console.log("[useEffect Debug] Album data processed.");
+
+        // 2. Handle Average Ratings
+        if (ratingsAvgRes.ok) {
+          const avgData = await ratingsAvgRes.json();
+          setAverageRating(avgData.average ? avgData.average * 2 : 0);
+          setRatingCount(avgData.count || 0);
+          console.log("[useEffect Debug] Average rating processed:", avgData);
+        } else {
+            console.warn(`Failed to fetch average ratings: ${ratingsAvgRes.status}`);
         }
-        
-        // Get community average rating
-        try {
-          const avgResponse = await fetch(`/api/ratings/average?itemId=${id}&itemType=album`, {
-            credentials: 'include',
-            cache: 'no-store',
-            headers: {
-              'Cache-Control': 'no-cache'
-            }
-          });
-          
-          if (avgResponse.ok) {
-            const avgData = await avgResponse.json();
-            // Convert from API scale (0-5) to UI scale (0-10)
-            setAverageRating(avgData.average ? avgData.average * 2 : 0);
-            setRatingCount(avgData.count || 0);
-          }
-        } catch (err) {
-          console.error("Error fetching average rating:", err);
+
+        // 3. Handle Community Ratings
+        if (commRatingsRes.ok) {
+          const ratingsData = await commRatingsRes.json();
+          const convertedRatings = (ratingsData.ratings || []).map((rating: any) => ({
+            ...rating,
+            rating: rating.rating * 2 
+          }));
+          setCommunityRatings(convertedRatings);
+          console.log("[useEffect Debug] Community ratings processed:", convertedRatings);
+        } else {
+            console.warn(`Failed to fetch community ratings: ${commRatingsRes.status}`);
         }
-        
-        // New: Get community ratings
-        try {
-          const ratingsResponse = await fetch(`/api/ratings/item?itemId=${id}&itemType=album&limit=10`, {
-            credentials: 'include'
-          });
-          
-          if (ratingsResponse.ok) {
-            const ratingsData = await ratingsResponse.json();
-            // Convert community ratings from API scale (0-5) to UI scale (0-10)
-            const convertedRatings = (ratingsData.ratings || []).map((rating) => ({
-              ...rating,
-              rating: rating.rating * 2 // Convert from 0-5 to 0-10 scale
-            }));
-            setCommunityRatings(convertedRatings);
+
+        // 4. Handle User Rating (if fetched)
+        if (userRatingRes && userRatingRes.ok) {
+          const userRatingData = await userRatingRes.json();
+          if (userRatingData.rating !== undefined) { // Check if rating property exists
+            setUserRating(userRatingData.rating * 2);
+            setUserReview(userRatingData.review || '');
+            console.log("[useEffect Debug] User rating processed:", userRatingData);
+          } else {
+              console.log("[useEffect Debug] User rating response OK, but no rating field found.");
           }
-        } catch (err) {
-          console.error("Error fetching community ratings:", err);
+        } else if (userRatingRes) { // Log status if response exists but not ok
+            console.warn(`Failed to fetch user rating: ${userRatingRes.status}`);
         }
-        
-        setLoading(false);
+
+        // 5. Handle Favorite Status (if fetched)
+        if (favoriteStatusRes && favoriteStatusRes.ok) {
+           const favData = await favoriteStatusRes.json();
+           setIsFavorite(favData.isFavorite === true); // Explicit boolean check
+           console.log("[useEffect Debug] Favorite status processed:", favData);
+        } else if (favoriteStatusRes) { // Log status if response exists but not ok
+            console.warn(`Failed to fetch favorite status: ${favoriteStatusRes.status}`);
+        }
+
       } catch (err) {
-        console.error("Error:", err);
-        setError(err.message);
+        console.error("Error in fetchAlbumData:", err);
+        setError((err as Error).message); 
+        // setLoading(false) is handled by finally
+      } finally {
+        console.log(`[AlbumDetail Debug] Entering finally block. Setting loading to false.`);
         setLoading(false);
       }
     };
     
     fetchAlbumData();
-  }, [id, session, status]);
+  }, [albumId, session, status]);
   
   // Submit rating and review
   const handleRatingSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
@@ -354,24 +378,6 @@ export default function AlbumDetail() {
       setShowSuccess(true);
       setTimeout(() => setShowSuccess(false), 3000);
       
-      // Refresh average rating and community ratings
-      const avgResponse = await fetch(`/api/ratings/average?itemId=${itemIdToSubmit}&itemType=album`);
-      if (avgResponse.ok) {
-        const avgData = await avgResponse.json();
-        setAverageRating(avgData.average ? avgData.average * 2 : 0);
-        setRatingCount(avgData.count || 0);
-      }
-      
-      const ratingsResponse = await fetch(`/api/ratings/item?itemId=${itemIdToSubmit}&itemType=album&limit=10`);
-      if (ratingsResponse.ok) {
-        const ratingsData = await ratingsResponse.json();
-         const convertedRatings = (ratingsData.ratings || []).map((rating: any) => ({
-          ...rating,
-          rating: rating.rating * 2 // Convert scale for display
-        }));
-        setCommunityRatings(convertedRatings);
-      }
-      
     } catch (err) {
       console.error("Error submitting rating:", err);
       alert("Failed to save rating. Please try again.");
@@ -390,29 +396,29 @@ export default function AlbumDetail() {
     try {
       if (isFavorite) {
         // Remove from favorites
-        await fetch(`/api/favorites?itemId=${id}&itemType=album`, {
-          method: 'DELETE',
-          credentials: 'include',
-          cache: 'no-store',
-          headers: {
-            'Cache-Control': 'no-cache'
-          }
-        });
+        // await fetch(`/api/favorites?itemId=${id}&itemType=album`, {
+        //   method: 'DELETE',
+        //   credentials: 'include',
+        //   cache: 'no-store',
+        //   headers: {
+        //     'Cache-Control': 'no-cache'
+        //   }
+        // });
       } else {
         // Add to favorites
-        await fetch('/api/favorites', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Cache-Control': 'no-cache'
-          },
-          credentials: 'include',
-          body: JSON.stringify({
-            itemId: id,
-            itemType: 'album'
-          }),
-          cache: 'no-store',
-        });
+        // await fetch('/api/favorites', {
+        //   method: 'POST',
+        //   headers: {
+        //     'Content-Type': 'application/json',
+        //     'Cache-Control': 'no-cache'
+        //   },
+        //   credentials: 'include',
+        //   body: JSON.stringify({
+        //     itemId: id,
+        //     itemType: 'album'
+        //   }),
+        //   cache: 'no-store',
+        // });
       }
       
       // Toggle the UI state
@@ -514,7 +520,7 @@ export default function AlbumDetail() {
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ duration: 0.5, delay: 0.2 }}
               >
-                {album.artists?.map(artist => artist.name).join(', ')}
+                {album.artists?.map((artist: AlbumArtist) => artist.name).join(', ')}
               </motion.p>
               
               <motion.div 
@@ -527,7 +533,7 @@ export default function AlbumDetail() {
                 <span>•</span>
                 <span>{album.total_tracks} tracks</span>
                 <span>•</span>
-                <span>{Math.floor(album.tracks?.items.reduce((acc, track) => acc + track.duration_ms, 0) / 60000) || 0} min</span>
+                <span>{Math.floor((album.tracks?.items ?? []).reduce((acc: number, track: AlbumTrack) => acc + track.duration_ms, 0) / 60000) || 0} min</span>
               </motion.div>
               
               {/* Community Rating - Only show if there are ratings */}

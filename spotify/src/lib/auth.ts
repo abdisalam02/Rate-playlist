@@ -95,63 +95,141 @@ export const authOptions: AuthOptions = {
   ],
   callbacks: {
     async jwt({ token, account, profile }: { token: JWT; account: Account | null; profile?: Profile }): Promise<JWT> {
-      // Initial sign-in: Store necessary details
+      let updatedToken = { ...token }; // Work with a mutable copy
+
+      // Initial sign-in: Store necessary details including Supabase UUID and Name
       if (account && profile) {
-        token.accessToken = account.access_token;
-        token.refreshToken = account.refresh_token;
-        token.accessTokenExpires = Date.now() + (Number(account.expires_in) ?? 3600) * 1000;
-        // Use type assertion for Spotify-specific ID
-        token.id = (profile as any)?.id; 
-        token.name = profile.name; 
-        token.picture = profile.image; 
-        token.error = undefined; 
-        return token; 
+        console.log("JWT Callback: Initial Sign-in");
+        updatedToken.accessToken = account.access_token;
+        updatedToken.refreshToken = account.refresh_token;
+        updatedToken.accessTokenExpires = Date.now() + (Number(account.expires_in) ?? 3600) * 1000;
+        
+        const spotifyId = (profile as any)?.id;
+        if (!spotifyId) {
+            console.error("JWT Callback: Spotify profile ID missing during initial sign-in.");
+            return { ...updatedToken, error: "MissingSpotifyIdError" };
+        }
+        updatedToken.spotifyId = spotifyId; 
+        updatedToken.picture = (profile as any)?.images?.[0]?.url;
+        updatedToken.error = undefined; 
+        
+        // Fetch the corresponding Supabase User ID (UUID) AND display_name
+        try {
+          console.log(`JWT Callback: Fetching Supabase user for Spotify ID: ${spotifyId}`);
+          const { data: userData, error: dbError } = await supabase
+            .from('users')
+            .select('id, display_name') // Select UUID and DB display_name
+            .eq('spotify_id', spotifyId)
+            .single(); 
+
+          if (dbError || !userData) {
+            console.error("JWT Callback: Error fetching Supabase user/name or user not found.", dbError);
+            return { ...updatedToken, error: "SupabaseUserFetchError" }; 
+          }
+          
+          console.log(`JWT Callback: Found Supabase User ID: ${userData.id}, Name: ${userData.display_name}`);
+          updatedToken.sub = userData.id; // Store Supabase UUID
+          updatedToken.name = userData.display_name; // Store Supabase display_name
+
+        } catch (fetchError) {
+            console.error("JWT Callback: Catch block - Error fetching Supabase user ID/name", fetchError);
+            return { ...updatedToken, error: "SupabaseUserFetchCatchError" };
+        }
+        
+        console.log("JWT Callback: Initial token created.");
+        return updatedToken; 
       }
 
-      // Subsequent requests: Check if token is valid
-      if (token.accessTokenExpires && Date.now() < token.accessTokenExpires) {
-        // console.log("JWT: Token still valid.");
-         // Ensure no lingering error prevents usage if token is valid
-         if (token.error && token.error !== "RefreshAccessTokenError" && token.error !== "MissingRefreshTokenError" && token.error !== "RefreshAccessTokenCatchError") {
-             token.error = undefined;
-         }
-        return token; // Return current token if not expired
+      // Subsequent requests: Check if Supabase UUID (sub) exists - critical for fetching name
+      if (!updatedToken.sub) {
+         console.error("JWT Callback: Sub (Supabase User ID) missing from token on subsequent request.");
+         return { ...updatedToken, error: "MissingSubError" }; // Can't proceed without UUID
+      }
+
+      // Check if token is expired
+      const isTokenExpired = updatedToken.accessTokenExpires && Date.now() >= updatedToken.accessTokenExpires;
+
+      if (isTokenExpired) {
+          console.log("JWT: Token expired, attempting refresh...");
+          // Prevent refresh loop if refresh already failed critically or no refresh token
+          if (updatedToken.error === "RefreshAccessTokenError" || 
+              updatedToken.error === "MissingRefreshTokenError" || 
+              updatedToken.error === "SupabaseUserFetchError" || 
+              updatedToken.error === "SupabaseUserFetchCatchError" || 
+              !updatedToken.refreshToken) {
+             console.warn("JWT: Cannot refresh token due to previous critical error or missing refresh token.", { error: updatedToken.error, hasRefreshToken: !!updatedToken.refreshToken });
+             return updatedToken; // Return token with the existing critical error
+          }
+          updatedToken = await refreshAccessToken(updatedToken); // Refresh the access token
+          // Check if refresh itself failed
+          if (updatedToken.error) {
+              console.warn("JWT: Token refresh failed.", updatedToken.error);
+              return updatedToken; // Return token with refresh error
+          }
+          console.log("JWT: Token refresh successful.");
       }
       
-      // Token expired or needs refresh
-      console.log("JWT: Token expired or needs refresh, attempting...");
-      // Prevent refresh loop if refresh already failed critically or no refresh token
-      if (token.error === "RefreshAccessTokenError" || token.error === "MissingRefreshTokenError" || !token.refreshToken) {
-         console.warn("JWT: Cannot refresh token due to previous critical error or missing refresh token.", { error: token.error, hasRefreshToken: !!token.refreshToken });
-         return token; // Return token with the existing critical error
-      }
+      // --- ALWAYS Fetch latest name from DB before returning --- 
+      try {
+        // Fetch the current display_name using the Supabase UUID (token.sub)
+        const { data: nameData, error: nameError } = await supabase
+            .from('users')
+            .select('display_name')
+            .eq('id', updatedToken.sub)
+            .single();
 
-      // Attempt to refresh the token
-      return refreshAccessToken(token);
+        if (nameError) {
+            console.error("JWT Callback: Error re-fetching display_name:", nameError);
+            // Don't block session, just log error, keep potentially stale name
+        } else if (nameData) {
+            if (updatedToken.name !== nameData.display_name) {
+                console.log(`JWT Callback: Updating token name from '${updatedToken.name}' to '${nameData.display_name}'`);
+                updatedToken.name = nameData.display_name; // Update token name
+            }
+        } else {
+             console.warn(`JWT Callback: User ${updatedToken.sub} not found when re-fetching name.`);
+        }
+      } catch (fetchError) {
+        console.error("JWT Callback: Catch block - Error re-fetching display_name", fetchError);
+      }
+      // --- END Fetch latest name --- 
+      
+      // Clear non-critical errors if token is otherwise valid
+      if (!isTokenExpired && updatedToken.error && updatedToken.error !== "RefreshAccessTokenError" && updatedToken.error !== "MissingRefreshTokenError" && updatedToken.error !== "SupabaseUserFetchError" && updatedToken.error !== "SupabaseUserFetchCatchError" && updatedToken.error !== "MissingSubError") {
+          updatedToken.error = undefined;
+      }
+      
+      return updatedToken; // Return current or refreshed token with updated name
     },
     
     async session({ session, token }: { session: Session; token: JWT }): Promise<Session> {
-      // Pass required data from token to session
       session.accessToken = typeof token.accessToken === 'string' ? token.accessToken : undefined;
       session.error = typeof token.error === 'string' ? token.error : undefined;
       
-      // Ensure session.user exists and assign properties safely
       if (session.user) {
-        if (token.id) session.user.id = String(token.id); // Spotify ID
+        if (token.sub) session.user.id = token.sub; 
+        else console.warn("Session Callback: token.sub (Supabase User ID) is missing!");
+        
+        if (token.spotifyId) (session.user as any).spotifyId = token.spotifyId;
         if (token.name) session.user.name = token.name;
-        if (token.picture) session.user.image = token.picture;
+        
+        if (token.picture) { 
+            session.user.image = token.picture;
+        } else {
+            session.user.image = undefined;
+        }
       }
       
-      // DO NOT expose refreshToken to client
-      // session.refreshToken = token.refreshToken; 
-
-      // console.log("Session callback result:", session);
+      console.log("Session callback final result:", {
+        user: session.user, 
+        expires: session.expires, 
+        error: session.error, 
+        accessTokenExists: !!session.accessToken 
+      });
       return session;
     },
 
-    // Keep your existing signIn logic (assuming it works for Supabase upsert)
     async signIn({ user, account, profile }: { user: NextAuthUser; account: Account | null; profile?: Profile }): Promise<boolean> {
-        // Use type assertion for Spotify-specific ID
         const spotifyId = (profile as any)?.id;
         if (!spotifyId) {
             console.error("signIn Callback: Spotify profile ID is missing.");
@@ -164,12 +242,11 @@ export const authOptions: AuthOptions = {
         }
 
         try {
-            // console.log('signIn Callback: Triggered for', userEmail);
             const { data: existingUser, error: fetchError } = await supabase
-            .from('users')
-            .select('id')
-            .eq('spotify_id', spotifyId)
-            .maybeSingle();
+                .from('users')
+                .select('id')
+                .eq('spotify_id', spotifyId)
+                .maybeSingle();
 
             if (fetchError) {
                 console.error("signIn Callback: Error fetching user from Supabase:", fetchError);
@@ -178,36 +255,46 @@ export const authOptions: AuthOptions = {
 
             let dbUserId: string;
             if (!existingUser) {
-                // console.log('signIn Callback: Creating new user');
+                 console.log(`signIn Callback: Creating new user for Spotify ID: ${spotifyId}`);
+                const displayName = (profile as any)?.display_name || profile?.name || user.name || userEmail.split('@')[0] || 'User';
+                const profileImage = (profile as any)?.images?.[0]?.url || profile?.image || user.image || null;
+                
                 const { data: newUser, error: insertError } = await supabase
-                .from('users')
-                .insert({
-                    email: userEmail,
-                    spotify_id: spotifyId,
-                    display_name: profile?.name || user.name || userEmail.split('@')[0] || 'User',
-                    profile_image: profile?.image || user.image || null,
-                    last_login: new Date().toISOString()
-                })
-                .select('id')
-                .single();
+                    .from('users')
+                    .insert({
+                        email: userEmail,
+                        spotify_id: spotifyId,
+                        display_name: displayName,
+                        profile_image: profileImage, 
+                        last_login: new Date().toISOString()
+                    })
+                    .select('id')
+                    .single();
                 if (insertError) {
                     console.error('signIn Callback: Error creating user in Supabase:', insertError);
                     return false; 
                 }
                 dbUserId = newUser.id;
+                console.log(`signIn Callback: New user created with Supabase ID: ${dbUserId}`);
                 try {
                     const { error: initError } = await supabase.rpc('initialize_user_moods', { user_id_input: dbUserId });
                     if (initError) console.error('signIn Callback: Error initializing user moods via RPC:', initError);
+                    else console.log(`signIn Callback: Initialized moods for new user ${dbUserId}`);
                 } catch (initError) {
                     console.error('signIn Callback: Error calling RPC for mood tables:', initError);
                 }
             } else {
-                // console.log('signIn Callback: Updating existing user', existingUser.id);
                 dbUserId = existingUser.id;
+                console.log(`signIn Callback: Updating existing user ${dbUserId} for Spotify ID: ${spotifyId}`);
+                const displayName = (profile as any)?.display_name || profile?.name || user.name || userEmail.split('@')[0] || 'User';
+                const profileImage = (profile as any)?.images?.[0]?.url || profile?.image || user.image || null;
+                
                 const { error: updateError } = await supabase
-                .from('users')
-                .update({ last_login: new Date().toISOString() })
-                .eq('id', dbUserId);
+                    .from('users')
+                    .update({ 
+                        last_login: new Date().toISOString(),
+                    })
+                    .eq('id', dbUserId);
                 if (updateError) console.error('signIn Callback: Error updating user last login:', updateError);
             }
             return true;

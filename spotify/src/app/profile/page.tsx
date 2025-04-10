@@ -13,8 +13,10 @@ import { Album, Artist, UserProfile, Playlist } from '@/types.d';
 import { PlusCircleIcon } from '@heroicons/react/24/solid';
 import MoodManager from '../components/MoodManager';
 import { PlaceholderImage } from "../components/PlaceholderImage";
-import { HomeIcon, StarIcon, ChatBubbleLeftRightIcon, QueueListIcon } from '@heroicons/react/24/solid';
+import { HomeIcon, StarIcon, ChatBubbleLeftRightIcon, QueueListIcon, TrashIcon } from '@heroicons/react/24/solid';
 import UserAvatar from '@/app/components/UserAvatar'; // Import UserAvatar
+import { ConfirmModal } from '@/app/components/modals/ConfirmModal';
+import { EditProfileModal } from '@/app/components/modals/EditProfileModal'; // <-- Import EditProfileModal
 
 // Define TABS constant
 const TABS = {
@@ -758,7 +760,7 @@ const tabConfig = [
 
 // --- Existing Profile Page Component --- 
 export default function Profile() {
-  const { data: session, status } = useSession();
+  const { data: session, status, update } = useSession(); // <-- Destructure the update function
   const router = useRouter();
   const searchParams = useSearchParams();
   const pathname = usePathname();
@@ -789,6 +791,95 @@ export default function Profile() {
   const [ratingsFilter, setRatingsFilter] = useState<'all' | 'track' | 'album'>('all');
   const [ratingsSort, setRatingsSort] = useState<'recent' | 'highest' | 'lowest'>('recent');
   const [ratingSearch, setRatingSearch] = useState('');
+  
+  // --- MOVE STATE INSIDE --- 
+  // --- State for Confirmation Modal ---
+  const [isConfirmModalOpen, setIsConfirmModalOpen] = useState(false);
+  const [ratingToDelete, setRatingToDelete] = useState<{ id: string; name: string } | null>(null);
+  // --- State for Edit Profile Modal ---
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+  // --- END MOVE STATE --- 
+  
+  // --- Initiate delete process ---
+  const handleDeleteRating = (ratingId: string, ratingName: string) => {
+    if (!ratingId) {
+      console.error("Delete error: No rating ID provided.");
+      return;
+    }
+    // Set the rating to be deleted and open the modal
+    setRatingToDelete({ id: ratingId, name: ratingName });
+    setIsConfirmModalOpen(true);
+  };
+
+  // --- MOVE HANDLERS INSIDE --- 
+  // --- Function to execute the deletion after confirmation ---
+  const executeDelete = async () => {
+    if (!ratingToDelete) return;
+
+    const toastId = toast.loading('Deleting rating...');
+    try {
+      const response = await fetch(`/api/ratings/item/${ratingToDelete.id}`, {
+        method: 'DELETE',
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({ error: 'Failed to delete rating' }));
+        throw new Error(errorData.error || `Failed to delete: ${response.statusText}`);
+      }
+
+      // Remove rating from state
+      setUserRatings(prevRatings => prevRatings.filter(rating => rating.id !== ratingToDelete.id));
+
+      toast.success('Rating deleted!', { id: toastId });
+    } catch (error) {
+      console.error('Failed to delete rating:', error);
+      toast.error(`Error: ${(error as Error).message || 'Could not delete rating'}`, { id: toastId });
+    } finally {
+      // Close modal and clear the rating to delete state regardless of success/error
+      setIsConfirmModalOpen(false);
+      setRatingToDelete(null);
+    }
+  };
+
+  // --- Handle saving profile changes --- 
+  const handleSaveProfile = async (newName: string): Promise<boolean> => {
+    const toastId = toast.loading('Updating profile...');
+    try {
+      const response = await fetch('/api/user/profile', {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ displayName: newName }),
+      });
+
+      const result = await response.json();
+
+      if (!response.ok) {
+        throw new Error(result.error || `Failed to update profile: ${response.statusText}`);
+      }
+
+      // Update local profile state immediately
+      setProfile(prevProfile => 
+        prevProfile ? { ...prevProfile, display_name: result.user.displayName } : null
+      );
+      
+      // --- UPDATE SESSION --- 
+      // Manually update the session data on the client side - RE-ADD THIS
+      await update({ name: result.user.displayName }); 
+      // console.log('Client session update attempted for name:', result.user.displayName);
+      // Remove the direct manipulation which doesn't work reliably:
+      toast.success('Profile updated successfully!', { id: toastId });
+      router.refresh(); // Keep this for syncing server components
+      return true; // Indicate success
+
+    } catch (error) {
+      console.error('Failed to update profile:', error);
+      toast.error(`Error: ${(error as Error).message || 'Could not update profile'}`, { id: toastId });
+      return false; // Indicate failure
+    }
+  };
+  // --- END MOVE HANDLERS --- 
   
   // Function to handle track rating - moved inside component
   const handleRateTrack = (trackId: string, rating: number) => {
@@ -1141,7 +1232,22 @@ export default function Profile() {
                     {userRatings
                       .filter(rating => rating.item_type === 'track')
                       .map((rating) => (
-                      <div key={rating.id} className="group bg-[#202020] hover:bg-[#282828] rounded-lg overflow-hidden shadow-lg transition-all duration-300 hover:shadow-xl hover:-translate-y-1">
+                      // Ensure the parent div has the 'group' and 'relative' classes
+                      <div key={rating.id} className="group relative bg-[#202020] hover:bg-[#282828] rounded-lg overflow-hidden shadow-lg transition-all duration-300 hover:shadow-xl hover:-translate-y-1">
+                        {/* --- RE-ADD DELETE BUTTON --- */}
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            e.preventDefault();
+                            handleDeleteRating(rating.id, rating.name || 'Unknown Track');
+                          }}
+                          className="absolute top-2 right-2 z-20 p-1.5 bg-black/50 hover:bg-red-600/80 rounded-full text-gray-300 hover:text-white transition-all opacity-0 group-hover:opacity-100 focus:opacity-100"
+                          aria-label="Delete rating"
+                          title="Delete rating"
+                        >
+                          <TrashIcon className="w-4 h-4" />
+                        </button>
+                        {/* --- END RE-ADD --- */}
                         <Link href={`/track/${rating.spotify_id || rating.item_id}`}>
                             <div className="relative aspect-square">
                             {rating.image_url ? (
@@ -1201,7 +1307,22 @@ export default function Profile() {
                     {userRatings
                       .filter(rating => rating.item_type === 'album')
                       .map((rating) => (
-                      <div key={rating.id} className="group bg-[#202020] hover:bg-[#282828] rounded-lg overflow-hidden shadow-lg transition-all duration-300 hover:shadow-xl hover:-translate-y-1">
+                      // Ensure the parent div has the 'group' and 'relative' classes
+                      <div key={rating.id} className="group relative bg-[#202020] hover:bg-[#282828] rounded-lg overflow-hidden shadow-lg transition-all duration-300 hover:shadow-xl hover:-translate-y-1">
+                        {/* --- RE-ADD DELETE BUTTON --- */}
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            e.preventDefault();
+                            handleDeleteRating(rating.id, rating.name || 'Unknown Album');
+                          }}
+                          className="absolute top-2 right-2 z-20 p-1.5 bg-black/50 hover:bg-red-600/80 rounded-full text-gray-300 hover:text-white transition-all opacity-0 group-hover:opacity-100 focus:opacity-100"
+                          aria-label="Delete rating"
+                          title="Delete rating"
+                        >
+                          <TrashIcon className="w-4 h-4" />
+                        </button>
+                        {/* --- END RE-ADD --- */}
                         <Link href={`/album/${rating.spotify_id || rating.item_id}`}>
                             <div className="relative aspect-square">
                             {rating.image_url ? (
@@ -1537,9 +1658,14 @@ export default function Profile() {
                   </a>
                 )}
                 
-                <button className="bg-[#282828] hover:bg-[#333] text-white font-bold px-4 py-2 rounded-full text-sm transition-colors">
+                {/* --- MODIFIED: Edit Profile Button --- */}
+                <button 
+                  onClick={() => setIsEditModalOpen(true)} // Open the modal
+                  className="bg-[#282828] hover:bg-[#333] text-white font-bold px-4 py-2 rounded-full text-sm transition-colors"
+                >
                   Edit Profile
                 </button>
+                {/* --- END MODIFIED --- */}
                       </div>
                     </div>
                   </div>
@@ -1591,9 +1717,33 @@ export default function Profile() {
         {renderContent()}
       </div>
       
-      {/* Remove Mood Search Modal */}
-    </div>
-  );
-} 
+      {/* --- MOVE MODAL RENDERING INSIDE RETURN --- */}
+      {/* --- Render Confirmation Modal --- */}
+      {ratingToDelete && (
+        <ConfirmModal
+          isOpen={isConfirmModalOpen}
+          onClose={() => {
+            setIsConfirmModalOpen(false);
+            setRatingToDelete(null); // Clear selection on cancel
+          }}
+          onConfirm={executeDelete}
+          title="Delete Rating"
+          message={`Are you sure you want to permanently delete your rating for "${ratingToDelete.name || 'this item'}"? This action cannot be undone.`}
+          confirmButtonText="Delete"
+          isDestructive={true}
+        />
+      )}
 
-// ... existing code ...
+      {/* --- Render Edit Profile Modal --- */}
+      <EditProfileModal
+        isOpen={isEditModalOpen}
+        onClose={() => setIsEditModalOpen(false)}
+        onSave={handleSaveProfile}
+        currentName={profile?.display_name || session?.user?.name}
+      />
+      {/* --- END MOVE MODAL RENDERING --- */}
+
+    </div> // This is the final closing div of the main return
+  ); 
+} // This is the final closing brace for the Profile component function
+

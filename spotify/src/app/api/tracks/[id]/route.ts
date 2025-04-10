@@ -207,20 +207,26 @@ export async function GET(
       let accessToken = session?.accessToken;
       if (!accessToken) {
           console.log("[API Track] No session token, using client credentials.");
-          accessToken = await getClientCredentialsToken();
-          if (!accessToken) {
-               console.error("[API Track] Failed to get client credentials token.");
-               return NextResponse.json({ error: "Authentication failed" }, { status: 500 });
-          }
+          // Fix type mismatch: handle null return explicitly
+          const clientToken = await getClientCredentialsToken(); 
+          if (clientToken === null) { // Check specifically for null
+               console.error("[API Track] Failed to get client credentials token (returned null).");
+               return NextResponse.json({ error: "Authentication failed: Could not retrieve client token" }, { status: 500 });
+          } 
+          // If not null, it must be a string, assign it
+          accessToken = clientToken;
+          // The check below is now redundant due to the null check above
+          // if (!accessToken) { ... }
       } else {
           console.log("[API Track] Using user session token.");
       }
 
+      // Now accessToken is guaranteed to be a string if we proceed
       const spotifyTrackUrl = `https://api.spotify.com/v1/tracks/${resolvedSpotifyId}`;
 
       // Prepare promises
       const spotifyFetchPromise = fetch(spotifyTrackUrl, {
-          headers: { Authorization: `Bearer ${accessToken}` },
+          headers: { Authorization: `Bearer ${accessToken}` }, // accessToken is now string
           cache: 'no-store'
         });
         

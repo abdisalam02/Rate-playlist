@@ -45,12 +45,13 @@ export async function GET(request: NextRequest) {
       // Try a simple query to verify the connection
       const { data: testData, error: testError } = await supabase
         .from('users')
-        .select('count(*)', { count: 'exact' });
+        .select('id')
+        .limit(1);
         
       if (testError) {
         console.error('Error testing Supabase connection:', testError);
       } else {
-        console.log('Supabase connection successful! User count:', testData);
+        console.log('Supabase connection successful! User count check removed, test user:', testData);
       }
     } catch (testErr) {
       console.error('Exception testing Supabase connection:', testErr);
@@ -83,141 +84,75 @@ export async function GET(request: NextRequest) {
       }
     }
     
-    // If we still have no user ID at this point, return error
-    if (!session?.user?.id && !spotifyUserId) {
-      console.error('No user ID available from session or Spotify API');
+    // If we still have no user ID from the session, return error (DB UUID is required now)
+    if (!session?.user?.id) {
+      console.error('No DB User ID (UUID) available from session.');
       return NextResponse.json({ 
         ratings: [],
-        error: 'Authentication required',
+        error: 'Authentication required or user ID missing from session',
         status: 'unauthorized' 
       });
     }
     
-    // Use the user ID from session or the one we got from Spotify
-    const userIdToUse = session?.user?.id || spotifyUserId;
+    // --- Use Correct IDs --- 
+    const correctDbUserId = session.user.id; // This is the database UUID
+    const knownIncorrectSpotifyId = '3c03a855-4036-4b12-8fcf-f6297273cfef'; // The literal Spotify ID used previously
     
-    // Try to get the user ID from users table by matching spotify_id or email
-    let dbUser = null;
-    
-    // Try with Spotify ID
-    if (userIdToUse) {
-      console.log('Looking up user by Spotify ID:', userIdToUse);
-      const { data: spotifyIdUser, error: spotifyIdError } = await supabase
-        .from('users')
-        .select('id')
-        .eq('spotify_id', userIdToUse)
-        .single();
-        
-      if (spotifyIdError) {
-        console.error('Error finding user by Spotify ID:', spotifyIdError.message);
-      }
-        
-      if (!spotifyIdError && spotifyIdUser) {
-        dbUser = spotifyIdUser;
-        console.log('Found user by Spotify ID:', dbUser.id);
-      } else {
-        console.log('User not found by Spotify ID');
-      }
-    }
-    
-    // If not found, try with email
-    if (!dbUser && session?.user?.email) {
-      console.log('Looking up user by email:', session.user.email);
-      const { data: emailUser, error: emailError } = await supabase
-        .from('users')
-        .select('id')
-        .eq('email', session.user.email)
-        .single();
-        
-      if (emailError) {
-        console.error('Error finding user by email:', emailError.message);
-      }
-        
-      if (!emailError && emailUser) {
-        dbUser = emailUser;
-        console.log('Found user by email:', dbUser.id);
-      } else {
-        console.log('User not found by email');
-      }
-    }
-    
-    // If user not found, create a new user record
-    if (!dbUser && (userIdToUse || session?.user?.email)) {
-      console.log('Creating new user record');
-      const { data: newUser, error: createError } = await supabase
-        .from('users')
-        .insert([
-          { 
-            spotify_id: userIdToUse || null, 
-            email: session?.user?.email || null,
-            display_name: session?.user?.name || 'User',
-            profile_image: session?.user?.image || null
-          }
-        ])
-        .select();
-        
-      if (createError) {
-        console.error('Failed to create user:', createError.message);
-      }
-        
-      if (!createError && newUser && newUser.length > 0) {
-        dbUser = newUser[0];
-        console.log('Created new user:', dbUser.id);
-      } else {
-        console.log('Failed to create user');
-      }
-    }
-    
-    // If we have a database user ID, use it to query ratings
+    // If we have a database user ID, use it to query ratings along with the old incorrect ID
     let userRatings = null;
-    if (dbUser?.id) {
-      console.log('Querying ratings by user_id:', dbUser.id);
-      let query = supabase
-              .from('ratings')
-              .select('*')
-        .eq('user_id', dbUser.id)
-              .order('created_at', { ascending: false })
-              .limit(limit)
-              .range(offset, offset + limit - 1);
-            
-      // Add item type filter if provided
-      if (itemType) {
+    console.log(`Querying ratings for DB ID: ${correctDbUserId} OR Old Spotify ID: ${knownIncorrectSpotifyId}`);
+    
+    // Construct the .or() filter string
+    const orFilter = `user_id.eq.${correctDbUserId},user_id.eq.${knownIncorrectSpotifyId}`;
+
+    let query = supabase
+        .from('ratings')
+        .select('*') // Select all columns initially
+        .or(orFilter) // Use .or() with the constructed filter
+        .order('created_at', { ascending: false })
+        .limit(limit)
+        .range(offset, offset + limit - 1);
+
+    // Add item type filter if provided
+    if (itemType) {
         query = query.eq('item_type', itemType);
-      }
-        
-      const { data, error } = await query;
-      
-      if (error) {
-        console.error('Error querying ratings:', error.message);
-      }
-        
-      if (!error && data && data.length > 0) {
-        console.log(`Found ${data.length} ratings with user_id: ${dbUser.id}`);
+    }
+
+    const { data, error } = await query;
+
+    if (error) {
+        // Log the specific error from Supabase
+        console.error(`Error querying ratings with OR filter (DB: ${correctDbUserId}, Spotify: ${knownIncorrectSpotifyId}):`, error);
+        // Return a 500 error as the query failed
+        return NextResponse.json({ error: 'Failed to query ratings database', details: error.message }, { status: 500 });
+    } else if (data && data.length > 0) {
+        console.log(`Found ${data.length} ratings matching DB ID or Spotify ID.`);
         userRatings = data;
-      } else {
-        console.log(`No ratings found for user ${dbUser.id}`);
-      }
+    } else {
+        console.log(`No ratings found matching DB ID or Spotify ID.`);
+        // Set to empty array, the check later will handle returning the message
+        userRatings = [];
     }
     
-    // If no ratings found, try a broader query to debug
+    // If no ratings found after the OR query, return empty
     if (!userRatings || userRatings.length === 0) {
-      console.log('No ratings found for specific user, checking if any ratings exist in the table');
-      
+      console.log('No ratings found for user (checked DB ID and specific old Spotify ID)');
+      // --- Check total count correctly --- 
       try {
-        const { data: allRatings, error: allRatingsError } = await supabase
+        // Corrected: Use { count: 'exact', head: true } for counting
+        const { error: countError, count: totalCount } = await supabase
           .from('ratings')
-          .select('count(*)', { count: 'exact' });
+          .select('*', { count: 'exact', head: true }); // Get only the count
           
-        if (allRatingsError) {
-          console.error('Error checking ratings table:', allRatingsError.message);
+        if (countError) {
+          console.error('Error checking total ratings count:', countError.message);
         } else {
-          console.log(`Total ratings in the table: ${allRatings}`);
+          console.log(`Total ratings in the table: ${totalCount}`); 
         }
       } catch (countErr) {
         console.error('Exception checking ratings count:', countErr);
       }
-      
-      console.log('No ratings found for user');
+      // --- End check total count --- 
       return NextResponse.json({ 
         ratings: [],
         message: 'No ratings found for this user'

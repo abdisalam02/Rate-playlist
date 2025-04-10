@@ -38,31 +38,7 @@ export async function GET(
   // }
 
   try {
-    // --- User ID Resolution ---
-    // Look up the user's UUID based on the provided Spotify ID (userIdParam)
-    console.log(`[Staple Tracks Route] Provided ID ${userIdParam}. Assuming Spotify ID, looking up UUID...`);
-    const { data: userData, error: userLookupError } = await supabase
-      .from('users')
-      .select('id') // Select the UUID
-      .eq('spotify_id', userIdParam) // Match against the spotify_id column
-      .maybeSingle(); // Use maybeSingle as the user might not exist
-
-    if (userLookupError) {
-      console.error(`[Staple Tracks Route] Error looking up user UUID for Spotify ID ${userIdParam}:`, userLookupError);
-      return createApiResponse(false, null, `Database error looking up user: ${userLookupError.message}`);
-    }
-
-    if (!userData?.id) {
-      console.error(`[Staple Tracks Route] Failed to find user UUID for Spotify ID ${userIdParam}.`);
-      // It's okay if the user doesn't exist, they just won't have tracks. Return empty.
-      return NextResponse.json({ tracks: [] }, { status: 200 }); 
-    }
-
-    const userUuid = userData.id; // The actual UUID to use in the next query
-    console.log(`[Staple Tracks Route] Found UUID ${userUuid} for Spotify ID ${userIdParam}.`);
-    // --- End User ID Resolution ---
-
-    // Now query mood_tracks using the user's UUID
+    // Directly use userIdParam (which is the UUID) to query mood_tracks
     const { data, error } = await supabase
       .from('mood_tracks')
       .select(`
@@ -74,7 +50,7 @@ export async function GET(
         added_at,
         staple_mood_id
       `)
-      .eq('user_id', userUuid) // Use the resolved UUID here
+      .eq('user_id', userIdParam) // <-- Use userIdParam directly
       .not('staple_mood_id', 'is', null);
 
     if (error) {
@@ -82,7 +58,7 @@ export async function GET(
       return createApiResponse(false, null, `Failed to fetch staple mood tracks: ${error.message}`);
     }
 
-    console.log(`Found ${data?.length || 0} staple mood tracks for user UUID ${userUuid}`);
+    console.log(`Found ${data?.length || 0} staple mood tracks for user UUID ${userIdParam}`);
     
     // Return the tracks directly in the 'tracks' property to match frontend expectation
     return NextResponse.json({ tracks: data || [] }, {
