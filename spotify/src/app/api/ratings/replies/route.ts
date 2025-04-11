@@ -1,19 +1,22 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth/next';
-import { authOptions } from '@/lib/auth';
+import { authOptions, AppSession } from '@/lib/auth';
 import supabase from '@/utils/supabase';
 
 export async function POST(request: NextRequest) {
   try {
     // 1. Get user session
-    const session = await getServerSession(authOptions);
-    if (!session?.user?.id) {
-      console.error('No valid user ID in session for posting reply');
+    const session = await getServerSession(authOptions) as AppSession | null;
+    
+    const correctUserId = session?.user?.id;
+    if (!correctUserId) {
+      console.error('No valid user ID (Supabase UUID) in session for posting reply');
       return NextResponse.json(
         { error: 'Authentication required' },
         { status: 401 }
       );
     }
+    console.log(`Authenticated user ID for reply: ${correctUserId}`);
 
     // 2. Parse request body
     const { ratingId, replyText, parentReplyId } = await request.json();
@@ -36,31 +39,12 @@ export async function POST(request: NextRequest) {
         );
     }
 
-    // 4. Get internal user ID
-    const { data: userData, error: userError } = await supabase
-      .from('users')
-      .select('id')
-      .eq('spotify_id', session.user.id)
-      .single();
-
-    if (userError || !userData) {
-      console.error('Error finding user for reply:', userError);
-      // Attempt to create user if not found (optional, adjust based on desired behavior)
-      // For now, just return an error if user not found
-      return NextResponse.json(
-        { error: 'User not found' },
-        { status: 404 }
-      );
-    }
-    const userId = userData.id;
-    console.log(`User ID for reply: ${userId}`);
-
-    // 5. Insert reply into review_replies table
+    // 5. Insert reply into review_replies table using the CORRECT user ID
     const insertPayload = {
         rating_id: ratingId,
-        user_id: userId,
-        reply_text: replyText.trim(), // Ensure trimmed text is saved
-        parent_reply_id: parentReplyId || null // Use null if not provided
+        user_id: correctUserId,
+        reply_text: replyText.trim(),
+        parent_reply_id: parentReplyId || null
     };
     console.log("Inserting reply with payload:", insertPayload);
 
@@ -75,15 +59,12 @@ export async function POST(request: NextRequest) {
             display_name,
             profile_image
         )
-      `) // Select the newly created reply along with user info
+      `)
       .single();
 
     if (insertError) {
       console.error('Error inserting reply:', insertError);
-      // Check for specific errors, e.g., foreign key constraint violation (invalid ratingId or parentReplyId)
-      if (insertError.code === '23503') { // Foreign key violation
-           // Could be invalid rating_id or invalid parent_reply_id
-           // More specific error checking might be needed if the DB schema allows differentiating
+      if (insertError.code === '23503') {
            return NextResponse.json(
              { error: 'Invalid rating ID or parent reply ID. Cannot add reply.' }, 
              { status: 404 }
@@ -97,8 +78,7 @@ export async function POST(request: NextRequest) {
 
     console.log('Reply successfully inserted:', replyData);
 
-    // Format the response to match potential frontend expectations
-     const formattedReply = {
+    const formattedReply = {
         id: replyData.id,
         ratingId: replyData.rating_id,
         parentReplyId: replyData.parent_reply_id,
@@ -109,16 +89,14 @@ export async function POST(request: NextRequest) {
         userImage: replyData.user?.profile_image
      };
 
-    // 6. Return success response with the created reply data
     return NextResponse.json({ 
         success: true, 
         message: 'Reply submitted successfully',
-        reply: formattedReply // Include the newly created reply
+        reply: formattedReply
     });
 
   } catch (error) {
     console.error('Error in ratings/replies POST route:', error);
-    // Distinguish between JSON parsing errors and other errors
     if (error instanceof SyntaxError) {
         return NextResponse.json(
           { error: 'Invalid request body format. Expected JSON.' },

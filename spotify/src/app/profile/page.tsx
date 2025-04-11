@@ -13,7 +13,7 @@ import { Album, Artist, UserProfile, Playlist } from '@/types.d';
 import { PlusCircleIcon } from '@heroicons/react/24/solid';
 import MoodManager from '../components/MoodManager';
 import { PlaceholderImage } from "../components/PlaceholderImage";
-import { HomeIcon, StarIcon, ChatBubbleLeftRightIcon, QueueListIcon, TrashIcon } from '@heroicons/react/24/solid';
+import { HomeIcon, StarIcon, ChatBubbleLeftRightIcon, QueueListIcon, TrashIcon, PlayIcon, MusicalNoteIcon } from '@heroicons/react/24/solid';
 import UserAvatar from '@/app/components/UserAvatar'; // Import UserAvatar
 import { ConfirmModal } from '@/app/components/modals/ConfirmModal';
 import { EditProfileModal } from '@/app/components/modals/EditProfileModal'; // <-- Import EditProfileModal
@@ -1223,150 +1223,152 @@ export default function Profile() {
             {userRatings.filter(rating => rating.item_type === 'track').length > 0 && (
               <div className="bg-[#181818]/60 p-6 rounded-xl border border-gray-800">
                 <h3 className="text-xl font-semibold mb-6 flex items-center">
-                  <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2 text-[#1DB954]" viewBox="0 0 20 20" fill="currentColor">
-                    <path d="M18 3a1 1 0 00-1.196-.98l-10 2A1 1 0 006 5v9.114A4.369 4.369 0 005 14c-1.657 0-3 .895-3 2s1.343 2 3 2 3-.895 3-2V7.82l8-1.6v5.894A4.37 4.37 0 0015 12c-1.657 0-3 .895-3 2s1.343 2 3 2 3-.895 3-2V3z" />
-                  </svg>
+                  <PlayIcon className="h-5 w-5 mr-2 text-[#1DB954]" /> {/* Track Icon */}
                   Track Ratings
                 </h3>
                 <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-5">
                     {userRatings
                       .filter(rating => rating.item_type === 'track')
-                      .map((rating) => (
-                      // Ensure the parent div has the 'group' and 'relative' classes
-                      <div key={rating.id} className="group relative bg-[#202020] hover:bg-[#282828] rounded-lg overflow-hidden shadow-lg transition-all duration-300 hover:shadow-xl hover:-translate-y-1">
-                        {/* --- RE-ADD DELETE BUTTON --- */}
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            e.preventDefault();
-                            handleDeleteRating(rating.id, rating.name || 'Unknown Track');
-                          }}
-                          className="absolute top-2 right-2 z-20 p-1.5 bg-black/50 hover:bg-red-600/80 rounded-full text-gray-300 hover:text-white transition-all opacity-0 group-hover:opacity-100 focus:opacity-100"
-                          aria-label="Delete rating"
-                          title="Delete rating"
-                        >
-                          <TrashIcon className="w-4 h-4" />
-                        </button>
-                        {/* --- END RE-ADD --- */}
-                        <Link href={`/track/${rating.spotify_id || rating.item_id}`}>
-                            <div className="relative aspect-square">
-                            {rating.image_url ? (
-                              <Image
-                                src={rating.image_url}
-                                alt={rating.name || 'Track'}
-                                fill
-                                sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 20vw"
-                                className="object-cover group-hover:scale-110 transition-transform duration-500"
-                                onError={(e) => {
-                                  // When image fails to load, hide it so placeholder shows
-                                  e.currentTarget.style.display = 'none';
-                                }}
-                              />
-                            ) : null}
-                            {/* Always render placeholder, but it's hidden when image loads successfully */}
-                            <div className={`absolute inset-0 ${rating.image_url ? 'opacity-0' : 'opacity-100'}`}>
-                              <PlaceholderImage type="track" />
-                    </div>
-                            {/* Add back the gradient overlay */}
-                            <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/30 to-transparent opacity-70 group-hover:opacity-90 transition-opacity"></div>
-                            <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
-                              <div className="bg-[#1DB954] text-black p-3 rounded-full transform transition-transform">
-                                <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" viewBox="0 0 20 20" fill="currentColor">
-                                  <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM9.555 7.168A1 1 0 008 8v4a1 1 0 001.555.832l3-2a1 1 0 000-1.664l-3-2z" clipRule="evenodd" />
-                                </svg>
-                    </div>
-                            </div>
+                      .map((rating) => {
+                        const itemName = rating.name || 'Unknown Track';
+                        const artistName = rating.artists?.map((a: { name: string }) => a.name).join(', ') || 'Unknown Artist';
+                        const imageUrl = rating.album?.images?.[0]?.url || '/placeholder.png';
+                        const ratingValue = rating.rating; // Use the 0-5 value directly
+                        
+                        return (
+                          <div key={rating.id} className="group relative bg-[#202020] hover:bg-[#282828] rounded-lg overflow-hidden shadow-lg transition-all duration-300 hover:shadow-xl hover:-translate-y-1">
+                            {/* Delete Button - Always visible */}
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                e.preventDefault();
+                                handleDeleteRating(rating.id, itemName); 
+                              }}
+                              className="absolute top-2 right-2 z-20 p-1.5 bg-black/60 hover:bg-red-600/90 rounded-full text-gray-300 hover:text-white transition-all" // Removed opacity classes
+                              aria-label="Delete rating"
+                              title="Delete rating"
+                            >
+                              <TrashIcon className="w-4 h-4" />
+                            </button>
+                            
+                            <Link href={`/track/${rating.item_id}`}>
+                              <div className="relative aspect-square">
+                                {/* Placeholder is always underneath */}
+                                <div className="absolute inset-0 flex items-center justify-center">
+                                  <PlaceholderImage type="track" />
+                                </div>
+                                {/* Real Image on top, hidden on error */}
+                                <Image
+                                  src={imageUrl}
+                                  alt={itemName}
+                                  fill
+                                  sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 20vw"
+                                  className="relative z-[1] object-cover group-hover:scale-110 transition-transform duration-500" // z-index added
+                                  onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} // Hide on error
+                                  unoptimized
+                                />
+                                {/* Gradient Overlay & Play Icon */}
+                                <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/30 to-transparent opacity-70 group-hover:opacity-90 transition-opacity"></div>
+                                <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                                  <div className="bg-[#1DB954] text-black p-3 rounded-full transform transition-transform">
+                                    <PlayIcon className="h-6 w-6" />{/* Example Play Icon */}
+                                  </div>
+                                </div>
+                              </div>
+                              {/* Rating Badge (Simplified) */}
+                              <div className="absolute bottom-0 right-0 m-2 bg-black/80 rounded-full px-2 py-1 flex items-center z-10">
+                                 {/* --- Simplified Star --- */}
+                                 <StarIcon className="text-yellow-400 h-3 w-3 mr-1" />
+                                 <span className="text-white text-xs font-semibold">{ratingValue.toFixed(1)}</span> 
+                              </div>
+                              <div className="p-4">
+                                <h4 className="font-medium line-clamp-1 text-white group-hover:text-[#1DB954] transition-colors" title={itemName}>{itemName}</h4>
+                                <p className="text-sm text-gray-400 line-clamp-1" title={artistName}>{artistName}</p> {/* USE CORRECTED artistName */}
+                                <p className="text-xs text-gray-500 mt-1">{new Date(rating.created_at).toLocaleDateString()}</p>
+                              </div>
+                            </Link>
                           </div>
-                          <div className="absolute bottom-0 right-0 m-2 bg-black/80 rounded-full px-2 py-1 flex items-center z-10">
-                            <span className="text-[#1DB954] mr-1">★</span>
-                            <span className="text-white text-sm font-bold">{rating.rating.toFixed(1)}</span>
-                          </div>
-                          <div className="p-4">
-                            <h4 className="font-medium line-clamp-1 text-white group-hover:text-[#1DB954] transition-colors">{rating.name || 'Unknown Track'}</h4>
-                            <p className="text-sm text-gray-400 line-clamp-1">{rating.artist_name || 'Unknown Artist'}</p>
-                            <p className="text-xs text-gray-500 mt-1">{new Date(rating.created_at).toLocaleDateString()}</p>
-                  </div>
-                    </Link>
-                        </div>
-                      ))
+                        );
+                      })
                     }
                   </div>
-                        </div>
+              </div>
             )}
                         
             {/* Album Ratings Section */}
             {userRatings.filter(rating => rating.item_type === 'album').length > 0 && (
-              <div className="bg-[#181818]/60 p-6 rounded-xl border border-gray-800">
-                <h3 className="text-xl font-semibold mb-6 flex items-center">
-                  <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2 text-[#1DB954]" viewBox="0 0 20 20" fill="currentColor">
-                    <path d="M10 18a8 8 0 100-16 8 8 0 000 16zM10 2a8 8 0 00-8 8 7.95 7.95 0 004.5 7.17 1 1 0 101-1.73A6 6 0 1116 10a1 1 0 102 0 8 8 0 00-8-8z" />
-                  </svg>
-                  Album Ratings
-                </h3>
-                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-5">
-                    {userRatings
-                      .filter(rating => rating.item_type === 'album')
-                      .map((rating) => (
-                      // Ensure the parent div has the 'group' and 'relative' classes
-                      <div key={rating.id} className="group relative bg-[#202020] hover:bg-[#282828] rounded-lg overflow-hidden shadow-lg transition-all duration-300 hover:shadow-xl hover:-translate-y-1">
-                        {/* --- RE-ADD DELETE BUTTON --- */}
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            e.preventDefault();
-                            handleDeleteRating(rating.id, rating.name || 'Unknown Album');
-                          }}
-                          className="absolute top-2 right-2 z-20 p-1.5 bg-black/50 hover:bg-red-600/80 rounded-full text-gray-300 hover:text-white transition-all opacity-0 group-hover:opacity-100 focus:opacity-100"
-                          aria-label="Delete rating"
-                          title="Delete rating"
-                        >
-                          <TrashIcon className="w-4 h-4" />
-                        </button>
-                        {/* --- END RE-ADD --- */}
-                        <Link href={`/album/${rating.spotify_id || rating.item_id}`}>
-                            <div className="relative aspect-square">
-                            {rating.image_url ? (
-                              <Image
-                                src={rating.image_url}
-                                alt={rating.name || 'Album'}
-                                fill
-                                sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 20vw"
-                                className="object-cover group-hover:scale-110 transition-transform duration-500"
-                                onError={(e) => {
-                                  // When image fails to load, hide it so placeholder shows
-                                  e.currentTarget.style.display = 'none';
+               <div className="bg-[#181818]/60 p-6 rounded-xl border border-gray-800">
+                 <h3 className="text-xl font-semibold mb-6 flex items-center">
+                   <MusicalNoteIcon className="h-5 w-5 mr-2 text-[#1DB954]" /> {/* Use valid Album Icon */} 
+                    Album Ratings
+                 </h3>
+                 <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-5">
+                     {userRatings
+                       .filter(rating => rating.item_type === 'album')
+                       .map((rating) => {
+                          const itemName = rating.name || 'Unknown Album';
+                          const artistName = rating.artists?.map((a: { name: string }) => a.name).join(', ') || 'Unknown Artist';
+                          const imageUrl = rating.images?.[0]?.url || '/placeholder.png';
+                          const ratingValue = rating.rating; // Use 0-5 value
+                          
+                          return (
+                            <div key={rating.id} className="group relative bg-[#202020] hover:bg-[#282828] rounded-lg overflow-hidden shadow-lg transition-all duration-300 hover:shadow-xl hover:-translate-y-1">
+                              {/* Delete Button - Always visible */}
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  e.preventDefault();
+                                  handleDeleteRating(rating.id, itemName);
                                 }}
-                              />
-                            ) : null}
-                            {/* Always render placeholder, but it's hidden when image loads successfully */}
-                            <div className={`absolute inset-0 ${rating.image_url ? 'opacity-0' : 'opacity-100'}`}>
-                              <PlaceholderImage type="album" />
-                        </div>
-                            {/* Add back the gradient overlay */}
-                            <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/30 to-transparent opacity-70 group-hover:opacity-90 transition-opacity"></div>
-                            <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
-                              <div className="bg-[#1DB954] text-black p-3 rounded-full transform transition-transform">
-                                <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" viewBox="0 0 20 20" fill="currentColor">
-                                  <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM9.555 7.168A1 1 0 008 8v4a1 1 0 001.555.832l3-2a1 1 0 000-1.664l-3-2z" clipRule="evenodd" />
-                                </svg>
-                      </div>
+                                className="absolute top-2 right-2 z-20 p-1.5 bg-black/60 hover:bg-red-600/90 rounded-full text-gray-300 hover:text-white transition-all" // Removed opacity classes
+                                aria-label="Delete rating"
+                                title="Delete rating"
+                              >
+                                <TrashIcon className="w-4 h-4" />
+                              </button>
+                              
+                              <Link href={`/album/${rating.item_id}`}>
+                                <div className="relative aspect-square">
+                                  {/* Placeholder is always underneath */}
+                                  <div className="absolute inset-0 flex items-center justify-center">
+                                    <PlaceholderImage type="album" />
+                                  </div>
+                                  {/* Real Image on top, hidden on error */}
+                                  <Image
+                                    src={imageUrl}
+                                    alt={itemName}
+                                    fill
+                                    sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 20vw"
+                                    className="relative z-[1] object-cover group-hover:scale-110 transition-transform duration-500"
+                                    onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
+                                    unoptimized
+                                  />
+                                  {/* Gradient Overlay and Play Button Icon */}
+                                  <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/30 to-transparent opacity-70 group-hover:opacity-90 transition-opacity"></div>
+                                  <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                                    <div className="bg-[#1DB954] text-black p-3 rounded-full transform transition-transform">
+                                      <PlayIcon className="h-6 w-6" />
+                                    </div>
+                                  </div>
+                                </div>
+                                {/* Rating Badge (Simplified) */}
+                                <div className="absolute bottom-0 right-0 m-2 bg-black/80 rounded-full px-2 py-1 flex items-center z-10">
+                                    {/* --- Simplified Star --- */}
+                                    <StarIcon className="text-yellow-400 h-3 w-3 mr-1" />
+                                    <span className="text-white text-xs font-semibold">{ratingValue.toFixed(1)}</span> 
+                                </div>
+                                <div className="p-4">
+                                  <h4 className="font-medium line-clamp-1 text-white group-hover:text-[#1DB954] transition-colors" title={itemName}>{itemName}</h4>
+                                  <p className="text-sm text-gray-400 line-clamp-1" title={artistName}>{artistName}</p> 
+                                  <p className="text-xs text-gray-500 mt-1">{new Date(rating.created_at).toLocaleDateString()}</p>
+                                </div>
+                              </Link>
                             </div>
-                          </div>
-                          <div className="absolute bottom-0 right-0 m-2 bg-black/80 rounded-full px-2 py-1 flex items-center z-10">
-                            <span className="text-[#1DB954] mr-1">★</span>
-                            <span className="text-white text-sm font-bold">{rating.rating.toFixed(1)}</span>
-                          </div>
-                          <div className="p-4">
-                            <h4 className="font-medium line-clamp-1 text-white group-hover:text-[#1DB954] transition-colors">{rating.name || 'Unknown Album'}</h4>
-                            <p className="text-sm text-gray-400 line-clamp-1">{rating.artist_name || 'Unknown Artist'}</p>
-                            <p className="text-xs text-gray-500 mt-1">{new Date(rating.created_at).toLocaleDateString()}</p>
-                        </div>
-                          </Link>
-                    </div>
-                      ))
-                    }
-                  </div>
-              </div>
+                          );
+                        })
+                     }
+                   </div>
+               </div>
             )}
                 
             {userRatings.length > 20 && (

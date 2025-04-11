@@ -172,8 +172,8 @@ export async function enrichItems(
         if (details && !details.error) {
             // Merge rating data with the full Spotify item data
             return { 
-                ...item, // Original rating info (id, rating, review, created_at, etc.)
-                ...details // Full Spotify info (name, artists array, album object, images array, etc.)
+                ...details, // Full Spotify info (name, artists array, album object, images array, etc.)
+                ...item, // Original rating info (id=UUID, rating, review, created_at, etc.)
             };
         } else {
              // Fallback if fetch failed or no details found
@@ -181,7 +181,10 @@ export async function enrichItems(
             return {
                 ...item,
                 // Provide a minimal structure expected by components
-                id: item.item_id, // Use item_id as the main ID here
+                 // CORRECTED: Use the original item.id (UUID)
+                 id: item.id, 
+                // Optionally add spotifyId if needed elsewhere
+                // spotifyId: item.item_id, 
                 name: `Unknown ${item.item_type}`,
                 type: item.item_type,
                 artists: [{ name: 'Unknown Artist' }],

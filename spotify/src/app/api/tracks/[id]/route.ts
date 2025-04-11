@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth/next';
 import { authOptions } from '@/lib/auth';
 import { getClientCredentialsToken, searchTracks } from '@/lib/spotify';
-import { AppSession } from '@/types/index';
+import { AppSession } from '@/lib/auth';
 
 // --- Simple In-Memory Cache for Deezer -> Spotify ID mapping ---
 const idCache = new Map<string, string | null>();
@@ -157,7 +157,7 @@ export async function GET(
   { params }: { params: { id: string } }
 ) {
   const session = await getServerSession(authOptions) as AppSession | null;
-  const requestedId = params.id;
+  const { id: requestedId } = params;
   let resolvedSpotifyId: string | null = null;
   let potentialDeezerPreview: string | null = null;
 

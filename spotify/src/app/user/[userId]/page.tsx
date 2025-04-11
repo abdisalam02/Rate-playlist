@@ -109,7 +109,7 @@ function ActivityItem({ activity }: { activity: any }) {
     : 'Unknown Artist';
 
   const rating = typeof activity.rating === 'number' ? activity.rating : 0;
-
+  
   return (
     <div className="border-b border-neutral-800 py-4 last:border-b-0">
       <div className="flex items-start gap-3">
@@ -117,7 +117,7 @@ function ActivityItem({ activity }: { activity: any }) {
           <div className="flex items-center justify-between mb-1">
             <span className="text-sm text-neutral-400">{new Date(activity.created_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}</span>
           </div>
-
+          
           <div className="flex items-center gap-3 mt-2">
             {(itemType === 'track' || itemType === 'album') && (
               <div className="shrink-0 w-12 h-12 rounded overflow-hidden bg-neutral-700">
@@ -126,13 +126,13 @@ function ActivityItem({ activity }: { activity: any }) {
                   alt={itemName}
                   width={48}
                   height={48}
-                  className="w-full h-full object-cover"
+                className="w-full h-full object-cover"
                   unoptimized
                   onError={(e) => { 
                     (e.target as HTMLImageElement).src = itemType === 'track' ? "/placeholder-track.png" : "/placeholder-album.png";
                   }}
-                />
-              </div>
+              />
+            </div>
             )}
             
             <div className="min-w-0">
@@ -378,7 +378,7 @@ export default function UserProfile() {
   const [error, setError] = useState<string | null>(null);
 
   const isCurrentUser = session?.user?.id === userId || session?.user?.spotifyId === userId;
-
+  
   useEffect(() => {
     if (!userId || typeof userId !== 'string') {
       setError('Invalid User ID');
@@ -420,28 +420,28 @@ export default function UserProfile() {
            setMoodsData(fetchedMoodsData);
         }
 
-      } catch (err) {
+          } catch (err) {
         console.error('Error fetching user page data:', err);
         setError(err instanceof Error ? err.message : 'An unknown error occurred');
       } finally {
         setLoading(false);
       }
     };
-
+    
     fetchAllData();
   }, [userId]);
-
+  
   if (loading) {
     return (
        <div className="min-h-screen bg-[#121212] text-white">
-         <Navbar />
+        <Navbar />
          <main className="container mx-auto px-4 pt-24 pb-16">
             <UserProfileSkeleton />
          </main>
-       </div>
+      </div>
     );
   }
-
+  
   if (error) {
     return (
        <div className="min-h-screen bg-[#121212] text-white">
@@ -467,7 +467,7 @@ export default function UserProfile() {
 
   const { profile, top_tracks = [], top_albums = [], recent_ratings = [] } = profileData;
   const { staple_mood_tracks = [], custom_moods = [] } = moodsData || {};
-
+  
   return (
     <div className="min-h-screen bg-gradient-to-b from-[#1f1f1f] to-[#121212] text-white">
       <Navbar />
@@ -493,7 +493,7 @@ export default function UserProfile() {
             {/* TODO: Add Follow Button if not current user */} 
           </div>
         </div>
-
+        
          {/* --- User's Staple Mood Tracks Section --- */} 
          {staple_mood_tracks.length > 0 && (
              <section className="mb-12">
@@ -501,8 +501,8 @@ export default function UserProfile() {
                  <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
                      {staple_mood_tracks.map((item) => (
                          <StapleMoodTrackCard key={item.mood_track_id} item={item} />
-                     ))}
-                 </div>
+                  ))}
+                </div>
              </section>
          )}
 
@@ -514,7 +514,7 @@ export default function UserProfile() {
                      {custom_moods.map((mood) => (
                          <CustomMoodCard key={mood.id} mood={mood} />
                      ))}
-                 </div>
+              </div>
              </section>
          )}
 
@@ -525,8 +525,8 @@ export default function UserProfile() {
              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4">
                {top_tracks.map((track) => (
                  <MediaCard key={track.id || track.item_id} item={track} type="track" />
-               ))}
-             </div>
+                  ))}
+                </div>
           </section>
         )}
 
@@ -537,8 +537,8 @@ export default function UserProfile() {
              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4">
                {top_albums.map((album) => (
                  <MediaCard key={album.id || album.item_id} item={album} type="album" />
-               ))}
-             </div>
+                  ))}
+                </div>
           </section>
         )}
 
@@ -558,8 +558,8 @@ export default function UserProfile() {
         {top_tracks.length === 0 && top_albums.length === 0 && recent_ratings.length === 0 && staple_mood_tracks.length === 0 && custom_moods.length === 0 && (
             <div className="text-center text-neutral-500 py-10">
                 This user hasn't added any ratings or moods yet.
-            </div>
-        )}
+                          </div>
+                        )}
 
       </main>
     </div>

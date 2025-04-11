@@ -1,11 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth/next';
-import { authOptions } from '@/lib/auth';
+import { authOptions, AppSession } from '@/lib/auth';
 import supabase from '@/utils/supabase';
 
-export async function DELETE(request: NextRequest, { params }: { params: { replyId: string } }) {
+export async function DELETE(
+  request: NextRequest,
+  { params }: { params: { replyId: string } }
+) {
   try {
-    const replyId = params.replyId;
+    const { replyId } = params;
     console.log(`Attempting to delete reply with ID: ${replyId}`);
 
     if (!replyId) {
@@ -13,31 +16,18 @@ export async function DELETE(request: NextRequest, { params }: { params: { reply
     }
 
     // 1. Get user session
-    const session = await getServerSession(authOptions);
+    const session = await getServerSession(authOptions) as AppSession | null;
     if (!session?.user?.id) {
       console.error('Authentication required for deleting reply');
       return NextResponse.json({ error: 'Authentication required' }, { status: 401 });
     }
-    const sessionUserId = session.user.id; // Spotify ID
+    const sessionUserId = session.user.id;
+    console.log(`Authenticated user ID (Supabase Auth): ${sessionUserId}`);
 
-    // 2. Get internal user ID from session Spotify ID
-    const { data: userData, error: userError } = await supabase
-      .from('users')
-      .select('id') // Select the internal UUID
-      .eq('spotify_id', sessionUserId)
-      .single();
-
-    if (userError || !userData) {
-      console.error(`User not found for Spotify ID ${sessionUserId}:`, userError);
-      return NextResponse.json({ error: 'User not found' }, { status: 404 });
-    }
-    const internalUserId = userData.id; // Internal UUID
-    console.log(`Internal user ID for delete request: ${internalUserId}`);
-
-    // 3. Fetch the reply to verify ownership
+    // 2. Fetch the reply to verify ownership
     const { data: replyData, error: fetchError } = await supabase
       .from('review_replies')
-      .select('id, user_id') // Select only needed fields
+      .select('id, user_id')
       .eq('id', replyId)
       .single();
 
@@ -50,19 +40,19 @@ export async function DELETE(request: NextRequest, { params }: { params: { reply
     }
 
     if (!replyData) {
-       return NextResponse.json({ error: 'Reply not found' }, { status: 404 });
+      return NextResponse.json({ error: 'Reply not found' }, { status: 404 });
     }
 
     console.log(`Reply ${replyId} belongs to user ${replyData.user_id}`);
 
-    // 4. Check ownership
-    if (replyData.user_id !== internalUserId) {
-      console.warn(`User ${internalUserId} attempted to delete reply ${replyId} owned by ${replyData.user_id}`);
+    // 3. Check ownership
+    if (replyData.user_id !== sessionUserId) {
+      console.warn(`User ${sessionUserId} attempted to delete reply ${replyId} owned by ${replyData.user_id}`);
       return NextResponse.json({ error: 'You are not authorized to delete this reply' }, { status: 403 }); // Forbidden
     }
 
-    // 5. Delete the reply
-    // TODO: Consider what to do with child replies. 
+    // 4. Delete the reply
+    // TODO: Consider what to do with child replies.
     // Option 1 (Current): Just delete this reply. Children become orphans (parent_reply_id points to nothing).
     // Option 2: Cascade delete children (Requires DB setup or recursive delete logic here).
     // Option 3: Mark as deleted (soft delete) instead of actually deleting.
@@ -76,8 +66,8 @@ export async function DELETE(request: NextRequest, { params }: { params: { reply
       return NextResponse.json({ error: 'Failed to delete reply' }, { status: 500 });
     }
 
-    console.log(`Reply ${replyId} deleted successfully by user ${internalUserId}`);
-    // 6. Return success response
+    console.log(`Reply ${replyId} deleted successfully by user ${sessionUserId}`);
+    // 5. Return success response
     return NextResponse.json({ success: true, message: 'Reply deleted successfully' });
 
   } catch (error) {

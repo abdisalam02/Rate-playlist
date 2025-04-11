@@ -12,7 +12,6 @@ import { toast } from 'react-hot-toast';
 import { useAudio } from './providers';
 import { communityEndpoints } from '@/app/index';
 import { fetchWithClientFallback } from '@/app/utils/api';
-import UserAvatar from '@/app/components/UserAvatar';
 
 // Types
 interface Artist {
@@ -394,61 +393,63 @@ function ActivityItem({ activity }: { activity: Activity }) {
       className="bg-[#181818] hover:bg-[#282828] p-4 rounded-lg mb-3 transition-colors"
     >
       <div className="flex items-start gap-3">
-        <Link href={`/user/${activity.user_id}`} className="flex-shrink-0">
-          <div className="w-10 h-10 rounded-full overflow-hidden bg-[#282828]">
-            <UserAvatar 
-              imageUrl={activity.user_image} 
-              username={activity.user_name} 
-              sizeClasses="w-full h-full"
-              textSizeClass="text-lg"
-            />
-          </div>
+        <Link href={`/user/${activity.user_id}`}>
+          <Image
+            src={activity.user_image || "/default-avatar.png"}
+            alt={`Profile image of ${activity.user_name}`}
+            width={40}
+            height={40}
+            className="rounded-full"
+          />
         </Link>
         
         <div className="flex-1 min-w-0">
           <div className="flex flex-wrap items-center gap-1">
             <Link href={`/user/${activity.user_id}`} className="font-semibold hover:underline">
               {activity.user_name}
-            </Link>
-            <span className="text-gray-400 text-sm">{getActivityText()}</span>
-            <Link href={`/${activity.item_type}/${activity.item_id}`} className="font-medium text-[#1DB954] hover:underline text-sm">
+                  </Link>
+            <span className="text-gray-400">{getActivityText()}</span>
+            <Link href={`/${activity.item_type}/${activity.item_id}`} className="font-medium text-[#1DB954] hover:underline">
               {activity.item_name}
-            </Link>
+                  </Link>
           </div>
+          
           {activity.item_artists && (
-            <p className="text-gray-400 text-xs truncate mt-0.5">
+            <p className="text-gray-400 text-sm truncate mt-1">
               {activity.item_artists}
             </p>
           )}
+          
           {activity.rating && (
-            <div className="mt-1.5">
-              <StarDisplay rating={activity.rating * 2} />
+            <div className="mt-2">
+              <StarDisplay rating={activity.rating} />
             </div>
           )}
+          
           {activity.review && (
-            <div className="mt-1.5">
-              <p className="text-gray-300 text-sm line-clamp-2">{activity.review}</p>
+            <div className="mt-2">
+              <p className="text-gray-300 text-sm">{activity.review}</p>
             </div>
           )}
-          <p className="text-gray-500 text-xs mt-1.5">
+          
+          <p className="text-gray-500 text-xs mt-2">
             {getTimeAgo(activity.created_at)}
           </p>
         </div>
         
-        <Link href={`/${activity.item_type}/${activity.item_id}`} className="flex-shrink-0 ml-2">
-          <div className="w-12 h-12 rounded-md overflow-hidden bg-[#282828]">
+        <Link href={`/${activity.item_type}/${activity.item_id}`} className="flex-shrink-0">
+          <div className="w-12 h-12 rounded-md overflow-hidden">
             <Image
-              src={activity.item_image || "/placeholder-art.png"} 
-              alt={`${activity.item_type} artwork for ${activity.item_name}`}
+              src={activity.item_image || "/placeholder-art.png"}
+              alt={`${activity.item_type === 'track' ? 'Track' : activity.item_type.charAt(0).toUpperCase() + activity.item_type.slice(1)} artwork for ${activity.item_name}`}
               width={48}
               height={48}
               className="object-cover w-full h-full"
-              onError={handleImageError}
             />
           </div>
-        </Link>
+                  </Link>
       </div>
-    </motion.div>
+                </motion.div>
   );
 }
 

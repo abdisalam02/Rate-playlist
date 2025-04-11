@@ -6,29 +6,22 @@ import supabase from '@/utils/supabase';
 // GET handler for fetching ratings
 export async function GET(request: NextRequest) {
   try {
-    // Debugging the cookies and headers
-    const cookieHeader = request.headers.get('cookie');
-    console.log("GET ratings - Cookie header:", cookieHeader ? 'exists' : 'missing');
+    // Get the server session
+    const session = await getServerSession(authOptions) as AppSession | null; // Use AppSession
     
-    // Get the server session using auth options
-    const session = await getServerSession(authOptions);
-    
-    // More extensive logging to diagnose session issues
+    // --- Corrected: Directly use session.user.id ---
+    const correctUserId = session?.user?.id;
     console.log("GET ratings - Full session data:", JSON.stringify({
       authenticated: !!session,
-      hasAccessToken: session?.accessToken ? true : false,
-      userId: session?.user?.id || 'missing',
-      userName: session?.user?.name || 'missing'
+      userId: correctUserId
     }));
     
     // Check if user is authenticated
-    if (!session?.user?.id) {
+    if (!correctUserId) {
       console.error("No valid user ID in session for ratings GET");
-      return NextResponse.json(
-        { error: 'Authentication required' },
-        { status: 401 }
-      );
+      return NextResponse.json({ error: 'Authentication required' }, { status: 401 });
     }
+    // --- End Correction ---
     
     // Get query parameters
     const { searchParams } = new URL(request.url);
@@ -36,75 +29,44 @@ export async function GET(request: NextRequest) {
     const type = searchParams.get('type');
     
     if (!itemId || !type) {
-      return NextResponse.json(
-        { error: 'Item ID and type are required' },
-        { status: 400 }
-      );
+      return NextResponse.json({ error: 'Item ID and type are required' }, { status: 400 });
     }
     
-    // Get the user ID from the Spotify ID in the session
-    const { data: userData, error: userError } = await supabase
-      .from('users')
-      .select('id')
-      .eq('spotify_id', session.user.id)
-      .single();
+    // --- REMOVED Faulty User ID Lookup/Creation --- 
+    console.log(`Fetching rating for user ${correctUserId}, item ${itemId}, type ${type}`);
     
-    let userId;
-    
-    if (userError) {
-      console.log("User not found in DB, creating user:", session.user.id);
-      
-      // Create a new user
-      const { data: newUser, error: createError } = await supabase
-        .from('users')
-        .insert([
-          { 
-            spotify_id: session.user.id, 
-            display_name: session.user.name || 'User', 
-            profile_image: session.user.image || null
-          }
-        ])
-        .select();
-      
-      if (createError || !newUser || newUser.length === 0) {
-        console.error("Failed to create user:", createError);
-        return NextResponse.json({ rating: 0, review: '' });
-      }
-      
-      userId = newUser[0].id;
-    } else {
-      userId = userData.id;
-    }
-    
-    console.log("Found/created user ID:", userId);
-    
-    // Query the database for the user's rating
+    // Query the database for the user's rating using the CORRECT user ID
     const { data: ratingData, error: ratingError } = await supabase
       .from('ratings')
-      .select('*')
-      .eq('user_id', userId)
+      .select('rating, review, created_at, updated_at') // Select specific columns needed
+      .eq('user_id', correctUserId) // Use correctUserId
       .eq('item_id', itemId)
-      .eq('item_type', type);
+      .eq('item_type', type)
+      .maybeSingle(); // Use maybeSingle to handle 0 or 1 result
     
-    if (ratingError || !ratingData || ratingData.length === 0) {
-      // No rating found
-      return NextResponse.json({ rating: 0, review: '' });
+    if (ratingError) {
+       console.error(`Error fetching rating for user ${correctUserId}, item ${itemId}:`, ratingError);
+       return NextResponse.json({ error: 'Database error fetching rating' }, { status: 500 });
     }
     
-    // Return the rating
+    if (!ratingData) {
+      // No rating found for this user and item
+      console.log(`No rating found for user ${correctUserId}, item ${itemId}. Returning default.`);
+      return NextResponse.json({ rating: 0, review: '' }); 
+    }
+    
+    // Rating found, return it
+    console.log(`Rating found for user ${correctUserId}, item ${itemId}:`, ratingData);
     return NextResponse.json({
-      rating: parseFloat(ratingData[0].rating),
-      review: ratingData[0].review || '',
-      created_at: ratingData[0].created_at,
-      updated_at: ratingData[0].updated_at
+      rating: parseFloat(ratingData.rating), // Ensure rating is a number
+      review: ratingData.review || '',
+      created_at: ratingData.created_at,
+      updated_at: ratingData.updated_at
     });
     
   } catch (error) {
     console.error('Error in ratings GET route:', error);
-    return NextResponse.json(
-      { error: 'Internal server error' },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
   }
 }
 
@@ -112,15 +74,17 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     // Get user session
-    const session = await getServerSession(authOptions);
+    const session = await getServerSession(authOptions) as AppSession | null;
     
-    if (!session?.user?.id) {
-      console.error('No valid user ID in session for ratings POST');
+    const correctUserId = session?.user?.id;
+    if (!correctUserId) {
+      console.error('No valid user ID (Supabase UUID) in session for ratings POST');
       return NextResponse.json(
         { error: 'Authentication required' },
         { status: 401 }
       );
     }
+    console.log(`Authenticated user ID for rating POST: ${correctUserId}`);
     
     // Get request body
     const { itemId, itemType, rating, review } = await request.json();
@@ -156,169 +120,74 @@ export async function POST(request: NextRequest) {
       );
     }
     
-    // Multi-strategy approach for user ID resolution
-    console.log('Using multi-strategy approach to find/create user');
-    console.log('Session user ID:', session.user.id);
-    
-    // Try to find user by spotify_id
-    const { data: userData, error: userError } = await supabase
-      .from('users')
-      .select('id')
-      .eq('spotify_id', session.user.id)
-      .single();
-    
-    let userId;
-    
-    if (userError) {
-      console.log("User not found in DB, creating user:", session.user.id);
-      
-      // Create a new user
-      const { data: newUser, error: createError } = await supabase
-        .from('users')
-        .insert([
-          { 
-            spotify_id: session.user.id, 
-            display_name: session.user.name || 'User', 
-            profile_image: session.user.image || null
-          }
-        ])
-        .select();
-      
-      if (createError || !newUser || newUser.length === 0) {
-        console.error("Failed to create user:", createError);
-        
-        // Use fallback direct session ID
-        console.log("Using session ID directly as fallback");
-        userId = session.user.id;
-      } else {
-        userId = newUser[0].id;
-      }
-    } else {
-      userId = userData.id;
-    }
-    
-    console.log("Found/created user ID:", userId);
-    
-    // Check if user already has a rating for this item
+    // Check if user already has a rating for this item using the CORRECT user ID
     const { data: existingRatingData, error: existingError } = await supabase
       .from('ratings')
       .select('id')
-      .eq('user_id', userId)
+      .eq('user_id', correctUserId)
       .eq('item_id', itemId)
-      .eq('item_type', itemType);
-    
-    // Initialize as let since it might be reassigned
-    let existingRating = existingRatingData;
-    
+      .eq('item_type', itemType)
+      .maybeSingle();
+
     if (existingError) {
-      console.error('Error checking for existing rating:', existingError);
-      
-      // Try alternative query with text casting
-      const { data: altExistingRating, error: altExistingError } = await supabase
-        .from('ratings')
-        .select('id')
-        .filter('user_id::text', 'ilike', `%${userId}%`)
-        .eq('item_id', itemId)
-        .eq('item_type', itemType);
-        
-      if (!altExistingError && altExistingRating && altExistingRating.length > 0) {
-        existingRating = altExistingRating;
-      }
+      console.error(`Error checking for existing rating for user ${correctUserId}, item ${itemId}:`, existingError);
+      return NextResponse.json({ error: 'Database error checking rating' }, { status: 500 });
     }
     
     let result;
-    
-    if (existingRating && existingRating.length > 0) {
-      console.log("Updating existing rating for item:", itemId);
-      
-      // Update existing rating
+    let status = 200; // Default status for update
+
+    if (existingRatingData) {
+      console.log(`Updating existing rating (ID: ${existingRatingData.id}) for user ${correctUserId}, item ${itemId}`);
       const { error: updateError } = await supabase
         .from('ratings')
         .update({ 
-          rating: rating, 
-          review: review || '',
+          rating: numericRating,
+          review: review || null,
           updated_at: new Date().toISOString()
         })
-        .eq('id', existingRating[0].id);
+        .eq('id', existingRatingData.id);
       
       if (updateError) {
-        console.error("Failed to update rating:", updateError);
+        console.error(`Failed to update rating ID ${existingRatingData.id}:`, updateError);
         return NextResponse.json(
           { error: 'Failed to update rating', details: updateError.message },
           { status: 500 }
         );
       }
-      
-      result = { 
-        success: true, 
-        message: 'Rating updated'
-      };
+      result = { success: true, message: 'Rating updated' };
+      // status remains 200
+
     } else {
-      console.log("Creating new rating for item:", itemId);
-      
-      // Add new rating
-      const { data: newRating, error: insertError } = await supabase
+      console.log(`Inserting new rating for user ${correctUserId}, item ${itemId}`);
+      const { data: insertedData, error: insertError } = await supabase
         .from('ratings')
-        .insert([{
-          user_id: userId,
+        .insert({
+          user_id: correctUserId,
           item_id: itemId,
           item_type: itemType,
-          rating: rating,
-          review: review || ''
-        }])
+          rating: numericRating,
+          review: review || null
+        })
         .select('id')
         .single();
-      
+
       if (insertError) {
-        console.error("Failed to insert rating:", insertError);
-        
-        // Try with session ID directly as fallback
-        if (userId !== session.user.id) {
-          console.log("Trying direct session ID as fallback");
-          const { data: fallbackRating, error: fallbackError } = await supabase
-            .from('ratings')
-            .insert([{
-              user_id: session.user.id,
-              item_id: itemId,
-              item_type: itemType,
-              rating: rating,
-              review: review || ''
-            }])
-            .select('id')
-            .single();
-            
-          if (fallbackError) {
-            console.error("Fallback insert failed too:", fallbackError);
-            return NextResponse.json(
-              { error: 'Failed to insert rating', details: insertError.message },
-              { status: 500 }
-            );
-          }
-          
-          result = { 
-            success: true, 
-            message: 'Rating submitted with fallback ID',
-            id: fallbackRating.id
-          };
-        } else {
-          return NextResponse.json(
-            { error: 'Failed to insert rating', details: insertError.message },
-            { status: 500 }
-          );
-        }
-      } else {
-        result = { 
-          success: true, 
-          message: 'Rating submitted',
-          id: newRating.id
-        };
+        console.error(`Failed to insert new rating for user ${correctUserId}, item ${itemId}:`, insertError);
+         // Check for specific errors like foreign key constraints if needed
+         return NextResponse.json(
+          { error: 'Failed to save new rating', details: insertError.message },
+          { status: 500 }
+        );
       }
+      result = { success: true, message: 'Rating created', ratingId: insertedData?.id };
+      status = 201; // Set status to 201 Created
     }
-    
-    console.log("Rating operation successful:", result);
-    return NextResponse.json(result);
-    
-  } catch (error) {
+
+    console.log(`Rating POST successful for user ${correctUserId}, item ${itemId}. Status: ${status}`);
+    return NextResponse.json(result, { status });
+
+  } catch (error: any) {
     console.error('Error in ratings POST route:', error);
     return NextResponse.json(
       { error: 'Internal server error', details: error instanceof Error ? error.message : String(error) },

@@ -1,7 +1,20 @@
 import { JWT } from "next-auth/jwt";
 import SpotifyProvider from "next-auth/providers/spotify";
 import { supabase } from "../lib/supabase";
-import type { AuthOptions, Session, Profile, Account, User as NextAuthUser } from "next-auth";
+import type { AuthOptions, Session as NextAuthSession, Profile, Account, User as NextAuthUser } from "next-auth";
+
+// Define a more specific session type
+export interface AppSession extends NextAuthSession {
+  user?: {
+    name?: string | null;
+    email?: string | null;
+    image?: string | null;
+    id: string; // Supabase UUID (Required if user object exists)
+    spotifyId?: string; // Spotify ID
+  };
+  accessToken?: string;
+  error?: string;
+}
 
 const scopes = [
   "user-read-email",
@@ -50,7 +63,7 @@ async function refreshAccessToken(token: JWT): Promise<JWT> {
     });
 
     const refreshedTokens = await response.json();
-
+    
     if (!response.ok) {
       console.error("Error refreshing token response:", refreshedTokens);
       const errorDetails = refreshedTokens?.error_description || refreshedTokens?.error || JSON.stringify(refreshedTokens);
@@ -202,31 +215,54 @@ export const authOptions: AuthOptions = {
       return updatedToken; // Return current or refreshed token with updated name
     },
     
-    async session({ session, token }: { session: Session; token: JWT }): Promise<Session> {
-      session.accessToken = typeof token.accessToken === 'string' ? token.accessToken : undefined;
-      session.error = typeof token.error === 'string' ? token.error : undefined;
+    async session({ session, token }: { session: NextAuthSession; token: JWT }): Promise<AppSession> {
+      // Cast the incoming session to AppSession. 
+      // We'll ensure the required fields are populated.
+      const appSession: AppSession = session as AppSession;
+
+      appSession.accessToken = typeof token.accessToken === 'string' ? token.accessToken : undefined;
+      appSession.error = typeof token.error === 'string' ? token.error : undefined;
       
-      if (session.user) {
-        if (token.sub) session.user.id = token.sub; 
-        else console.warn("Session Callback: token.sub (Supabase User ID) is missing!");
-        
-        if (token.spotifyId) (session.user as any).spotifyId = token.spotifyId;
-        if (token.name) session.user.name = token.name;
-        
-        if (token.picture) { 
-            session.user.image = token.picture;
+      // Ensure user object exists and id is assigned if token.sub exists
+      if (token.sub) {
+        if (!appSession.user) {
+           // Initialize user object if it doesn't exist
+           appSession.user = { id: token.sub };
         } else {
-            session.user.image = undefined;
+           // Assign id if user exists but id might be missing (shouldn't happen with required id, but safe)
+           appSession.user.id = token.sub;
         }
+        
+        // Assign other optional properties
+        if (token.spotifyId) appSession.user.spotifyId = token.spotifyId as string;
+        if (token.name) appSession.user.name = token.name;
+        if (token.picture) {
+            appSession.user.image = token.picture;
+        } else {
+            // Explicitly set image to null/undefined if not in token
+            appSession.user.image = undefined; 
+        } 
+      } else {
+          console.warn("Session Callback: token.sub (Supabase User ID) is missing! Cannot fully populate session user.");
+          // If there's no token.sub, we can't guarantee user.id, 
+          // so we might remove the user object or leave it partially populated depending on requirements.
+          // For now, let's ensure it's at least potentially undefined if no ID.
+          if (appSession.user && !appSession.user.id) { 
+              // This state implies an issue, perhaps remove user?
+              // Or rely on downstream checks for user.id
+              console.error("Session Callback: User object exists but ID is missing after checking token.sub.")
+          }
       }
       
       console.log("Session callback final result:", {
-        user: session.user, 
-        expires: session.expires, 
-        error: session.error, 
-        accessTokenExists: !!session.accessToken 
+        user: appSession.user, 
+        expires: appSession.expires, 
+        error: appSession.error, 
+        accessTokenExists: !!appSession.accessToken 
       });
-      return session;
+      
+      // Type assertion might be needed if TS still complains, but logic ensures structure
+      return appSession as AppSession;
     },
 
     async signIn({ user, account, profile }: { user: NextAuthUser; account: Account | null; profile?: Profile }): Promise<boolean> {
@@ -243,33 +279,33 @@ export const authOptions: AuthOptions = {
 
         try {
             const { data: existingUser, error: fetchError } = await supabase
-                .from('users')
-                .select('id')
+            .from('users')
+            .select('id')
                 .eq('spotify_id', spotifyId)
-                .maybeSingle();
-
+            .maybeSingle();
+            
             if (fetchError) {
                 console.error("signIn Callback: Error fetching user from Supabase:", fetchError);
                 return false; 
             }
 
             let dbUserId: string;
-            if (!existingUser) {
+          if (!existingUser) {
                  console.log(`signIn Callback: Creating new user for Spotify ID: ${spotifyId}`);
                 const displayName = (profile as any)?.display_name || profile?.name || user.name || userEmail.split('@')[0] || 'User';
                 const profileImage = (profile as any)?.images?.[0]?.url || profile?.image || user.image || null;
-                
+            
                 const { data: newUser, error: insertError } = await supabase
-                    .from('users')
-                    .insert({
+              .from('users')
+              .insert({
                         email: userEmail,
                         spotify_id: spotifyId,
                         display_name: displayName,
                         profile_image: profileImage, 
                         last_login: new Date().toISOString()
-                    })
-                    .select('id')
-                    .single();
+              })
+              .select('id')
+              .single();
                 if (insertError) {
                     console.error('signIn Callback: Error creating user in Supabase:', insertError);
                     return false; 
@@ -297,11 +333,11 @@ export const authOptions: AuthOptions = {
                     .eq('id', dbUserId);
                 if (updateError) console.error('signIn Callback: Error updating user last login:', updateError);
             }
-            return true;
-        } catch (error) {
+        return true;
+      } catch (error) {
             console.error('signIn Callback: Uncaught error:', error);
             return false;
-        }
+      }
     },
   },
   pages: {

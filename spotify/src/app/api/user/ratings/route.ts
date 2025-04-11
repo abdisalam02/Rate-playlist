@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth/next';
-import { authOptions } from '@/lib/auth';
+import { authOptions, AppSession } from '@/lib/auth';
 import supabase from '@/utils/supabase'; // Use the global supabase client instead
+import { enrichItems } from '@/lib/enrichUtils'; // Import the enrichment utility
 
 // Define artist interface for TypeScript
 interface SpotifyArtist {
@@ -12,17 +13,30 @@ interface SpotifyArtist {
 export async function GET(request: NextRequest) {
   try {
     // Get the server session
-    const session = await getServerSession(authOptions);
+    const session = await getServerSession(authOptions) as AppSession | null;
     
-    // Debug logging
+    // --- CORRECT: Use session.user.id directly --- 
+    const correctUserId = session?.user?.id; // Supabase UUID
+    
     console.log('User ratings API route accessed');
     console.log('Session details:', {
       auth: !!session,
-      userId: session?.user?.id,
+      userId: correctUserId, // Use correct variable
       userName: session?.user?.name,
       email: session?.user?.email,
       accessToken: !!session?.accessToken
     });
+    
+    // Check for authentication
+    if (!correctUserId) {
+       console.error('User ratings API - Unauthorized: No user ID found in session.');
+       return NextResponse.json({
+         ratings: [],
+         error: 'Authentication required',
+         status: 'unauthorized'
+       });
+    }
+    // --- End Correction --- 
     
     // Get query parameters for filtering/pagination
     const { searchParams } = new URL(request.url);
@@ -35,7 +49,8 @@ export async function GET(request: NextRequest) {
       limit,
       offset,
       itemType: itemType || 'all',
-      url: request.url
+      url: request.url,
+      requestingUserId: correctUserId // Log the ID being used
     });
     
     // Verify Supabase connection
@@ -45,274 +60,76 @@ export async function GET(request: NextRequest) {
       // Try a simple query to verify the connection
       const { data: testData, error: testError } = await supabase
         .from('users')
-        .select('id')
-        .limit(1);
+        .select('count(*)', { count: 'exact' });
         
       if (testError) {
         console.error('Error testing Supabase connection:', testError);
-      } else {
-        console.log('Supabase connection successful! User count check removed, test user:', testData);
+        } else {
+        console.log('Supabase connection successful! User count:', testData);
       }
     } catch (testErr) {
       console.error('Exception testing Supabase connection:', testErr);
     }
     
-    // Check if we have session, but it doesn't have a valid session.user.id
-    // Try to get Spotify user data to populate the user ID
-    let spotifyUserId = null;
-    
-    if (session?.accessToken && (!session.user || !session.user.id)) {
-      console.log('Session has access token but no user ID. Fetching Spotify user profile...');
-      
-      try {
-        // Fetch Spotify profile directly to get user ID
-        const spotifyResponse = await fetch('https://api.spotify.com/v1/me', {
-          headers: {
-            'Authorization': `Bearer ${session.accessToken}`
-          }
-        });
-        
-        if (spotifyResponse.ok) {
-          const spotifyUserData = await spotifyResponse.json();
-          spotifyUserId = spotifyUserData.id;
-          console.log('Got Spotify user ID from API:', spotifyUserId);
-        } else {
-          console.error('Failed to fetch Spotify profile:', spotifyResponse.status);
-        }
-      } catch (error) {
-        console.error('Error fetching Spotify profile:', error);
-      }
-    }
-    
-    // If we still have no user ID from the session, return error (DB UUID is required now)
-    if (!session?.user?.id) {
-      console.error('No DB User ID (UUID) available from session.');
-      return NextResponse.json({ 
-        ratings: [],
-        error: 'Authentication required or user ID missing from session',
-        status: 'unauthorized' 
-      });
-    }
-    
-    // --- Use Correct IDs --- 
-    const correctDbUserId = session.user.id; // This is the database UUID
-    const knownIncorrectSpotifyId = '3c03a855-4036-4b12-8fcf-f6297273cfef'; // The literal Spotify ID used previously
-    
-    // If we have a database user ID, use it to query ratings along with the old incorrect ID
-    let userRatings = null;
-    console.log(`Querying ratings for DB ID: ${correctDbUserId} OR Old Spotify ID: ${knownIncorrectSpotifyId}`);
-    
-    // Construct the .or() filter string
-    const orFilter = `user_id.eq.${correctDbUserId},user_id.eq.${knownIncorrectSpotifyId}`;
-
+    // Query ratings directly using the authenticated user's ID
+    console.log('Querying ratings for user_id:', correctUserId);
     let query = supabase
-        .from('ratings')
-        .select('*') // Select all columns initially
-        .or(orFilter) // Use .or() with the constructed filter
-        .order('created_at', { ascending: false })
-        .limit(limit)
-        .range(offset, offset + limit - 1);
-
-    // Add item type filter if provided
-    if (itemType) {
+            .from('ratings')
+        // --- Select necessary fields for enrichment --- 
+        .select('id, item_id, item_type, rating, review, created_at') // Select only needed fields + FKs
+        .eq('user_id', correctUserId)
+            .order('created_at', { ascending: false })
+            .limit(limit)
+            .range(offset, offset + limit - 1);
+          
+    if (itemType === 'track' || itemType === 'album') {
         query = query.eq('item_type', itemType);
+    } else if (itemType) {
+        console.warn(`Invalid itemType filter received: ${itemType}. Ignoring filter.`);
     }
 
-    const { data, error } = await query;
+    const { data: userRatings, error: queryError } = await query;
 
-    if (error) {
-        // Log the specific error from Supabase
-        console.error(`Error querying ratings with OR filter (DB: ${correctDbUserId}, Spotify: ${knownIncorrectSpotifyId}):`, error);
-        // Return a 500 error as the query failed
-        return NextResponse.json({ error: 'Failed to query ratings database', details: error.message }, { status: 500 });
-    } else if (data && data.length > 0) {
-        console.log(`Found ${data.length} ratings matching DB ID or Spotify ID.`);
-        userRatings = data;
-    } else {
-        console.log(`No ratings found matching DB ID or Spotify ID.`);
-        // Set to empty array, the check later will handle returning the message
-        userRatings = [];
+    if (queryError) {
+        console.error(`Error querying ratings for user ${correctUserId}:`, queryError.message);
+        // Avoid exposing detailed error messages if not needed
+        return NextResponse.json({ error: 'Failed to fetch ratings' }, { status: 500 });
     }
-    
-    // If no ratings found after the OR query, return empty
+
     if (!userRatings || userRatings.length === 0) {
-      console.log('No ratings found for user (checked DB ID and specific old Spotify ID)');
-      // --- Check total count correctly --- 
-      try {
-        // Corrected: Use { count: 'exact', head: true } for counting
-        const { error: countError, count: totalCount } = await supabase
-          .from('ratings')
-          .select('*', { count: 'exact', head: true }); // Get only the count
-          
-        if (countError) {
-          console.error('Error checking total ratings count:', countError.message);
-        } else {
-          console.log(`Total ratings in the table: ${totalCount}`); 
-        }
-      } catch (countErr) {
-        console.error('Exception checking ratings count:', countErr);
-      }
-      // --- End check total count --- 
-      return NextResponse.json({ 
-        ratings: [],
-        message: 'No ratings found for this user'
-      });
+        console.log(`No ratings found for user ${correctUserId} with current filters.`);
+        return NextResponse.json({ 
+            ratings: [],
+            message: 'No ratings found for this user'
+        });
+    }
+
+    console.log(`Found ${userRatings.length} raw ratings for user ${correctUserId}.`);
+
+    // --- Use the actual enrichment function --- 
+    const accessToken = session?.accessToken;
+    if (!accessToken) {
+        console.log('No access token in session, returning raw ratings.');
+        // Map to a basic structure expected by frontend if enrichment is skipped
+        const basicRatings = userRatings.map(r => ({
+          ...r, 
+          name: `Unknown ${r.item_type}`,
+          artist_name: 'Unknown Artist',
+          image_url: '/placeholder.png'
+        }));
+        return NextResponse.json({ ratings: basicRatings });
     }
     
-    console.log(`Returning ${userRatings.length} ratings`);
-      
-      // Return the ratings as is if we don't have an access token to enrich them
-    if (!session?.accessToken) {
-        return NextResponse.json({ ratings: userRatings });
-      }
-      
-      // Enrich the ratings with Spotify data if we have any and have an access token
-      try {
-        // Process in batches to avoid rate limiting
-        const processedRatings = [];
-        const batchSize = 5;
-        const batches = Math.ceil(userRatings.length / batchSize);
-        
-        for (let i = 0; i < batches; i++) {
-          const batchStart = i * batchSize;
-          const batchRatings = userRatings.slice(batchStart, batchStart + batchSize);
-          
-          const batchPromises = batchRatings.map(async (rating) => {
-            try {
-              console.log('Processing rating:', rating.id);
-              
-              // Skip if we don't have valid item_id or item_type
-              if (!rating.item_id || !rating.item_type) {
-                console.log('Missing item_id or item_type for rating:', rating.id);
-                return {
-                  ...rating,
-                  name: 'Unknown Item',
-                  artist_name: 'Unknown Artist',
-                  image_url: '/placeholder.png'
-                };
-              }
-              
-              let spotifyData = null;
-              
-              // Fetch Spotify data based on item type
-              if (rating.item_type === 'track') {
-                try {
-                  console.log('Fetching track data for:', rating.item_id);
-                  
-                  // First try Spotify API
-                  const trackResponse = await fetch(`https://api.spotify.com/v1/tracks/${rating.item_id}`, {
-                    headers: {
-                      Authorization: `Bearer ${session.accessToken}`
-                    }
-                  });
-                  
-                  if (trackResponse.ok) {
-                    spotifyData = await trackResponse.json();
-                  } else {
-                    console.error(`Track fetch failed with status: ${trackResponse.status}`);
-                    
-                    // Try our local API as fallback
-                    const localResponse = await fetch(`/api/spotify/track/${rating.item_id}`, {
-                      headers: {
-                        'Cache-Control': 'no-cache'
-                      }
-                    });
-                    
-                    if (localResponse.ok) {
-                      spotifyData = await localResponse.json();
-                    }
-                  }
-                } catch (trackErr) {
-                  console.error(`Error fetching track ${rating.item_id}:`, trackErr);
-                }
-              } else if (rating.item_type === 'album') {
-                try {
-                  console.log('Fetching album data for:', rating.item_id);
-                  
-                  // First try Spotify API
-                  const albumResponse = await fetch(`https://api.spotify.com/v1/albums/${rating.item_id}`, {
-                    headers: {
-                      Authorization: `Bearer ${session.accessToken}`
-                    }
-                  });
-                  
-                  if (albumResponse.ok) {
-                    spotifyData = await albumResponse.json();
-                  } else {
-                    console.error(`Album fetch failed with status: ${albumResponse.status}`);
-                    
-                    // Try our local API as fallback
-                    const localResponse = await fetch(`/api/spotify/album/${rating.item_id}`, {
-                      headers: {
-                        'Cache-Control': 'no-cache'
-                      }
-                    });
-                    
-                    if (localResponse.ok) {
-                      spotifyData = await localResponse.json();
-                    }
-                  }
-                } catch (albumErr) {
-                  console.error(`Error fetching album ${rating.item_id}:`, albumErr);
-                }
-              }
-              
-            // Enrich the rating with Spotify data if available
-              if (spotifyData) {
-              let artistsString = '';
-              
-              if (rating.item_type === 'track') {
-                artistsString = spotifyData.artists?.map((a: SpotifyArtist) => a.name).join(', ') || 'Unknown Artist';
-              } else if (rating.item_type === 'album') {
-                artistsString = spotifyData.artists?.map((a: SpotifyArtist) => a.name).join(', ') || 'Unknown Artist';
-              }
-              
-              return {
-                ...rating,
-                // Use spotify_id from the API if available
-                spotify_id: spotifyData.id || rating.item_id,
-                name: spotifyData.name || 'Unknown Item',
-                artist_name: artistsString,
-                image_url: rating.item_type === 'track' 
-                  ? spotifyData.album?.images?.[0]?.url || '/placeholder.png'
-                  : spotifyData.images?.[0]?.url || '/placeholder.png'
-              };
-            }
-            
-            // Return the original rating if we couldn't fetch Spotify data
-            return rating;
-          } catch (err) {
-            console.error(`Error processing rating ${rating.id}:`, err);
-            return rating;
-            }
-          });
-          
-          const batchResults = await Promise.all(batchPromises);
-          processedRatings.push(...batchResults);
-        }
-        
-      console.log(`Processed ${processedRatings.length} ratings with Spotify data`);
-      
-      return NextResponse.json({ 
-        ratings: processedRatings,
-        count: processedRatings.length
-      });
-    } catch (err) {
-      console.error('Error enriching ratings:', err);
-      
-      // Still return the ratings even if enriching failed
-      return NextResponse.json({ 
-        ratings: userRatings,
-        count: userRatings.length,
-        enriched: false
-      });
-    }
-  } catch (err) {
-    console.error('Error fetching ratings from database:', err);
-    return NextResponse.json({ 
-      ratings: [],
-      error: 'Database error',
-      message: err instanceof Error ? err.message : 'Unknown error'
-    });
+    console.log('Attempting to enrich ratings with Spotify data using enrichItems...');
+    
+    // Assuming RatingItem type is compatible or enrichItems handles the structure
+    const processedRatings = await enrichItems(userRatings, null, accessToken);
+
+    console.log(`Returning ${processedRatings.length} potentially enriched ratings.`);
+    return NextResponse.json({ ratings: processedRatings });
+
+  } catch (error: any) {
+    console.error('Error in GET /api/user/ratings:', error);
+    return NextResponse.json({ error: 'Internal server error', details: error.message }, { status: 500 });
   }
 } 
